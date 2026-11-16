@@ -75,9 +75,9 @@ export function HomePage() {
         <div className="absolute inset-0">
           <SafeImage
             src={HERO_ARENA_IMAGE}
-            alt="UMC Minecraft Championship Arena"
+            alt="UMC Unofficial Minecraft Community Arena"
             className="w-full h-full object-cover opacity-45"
-            fallbackTitle="UMC Championship Arena"
+            fallbackTitle="UMC Community Arena"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#090B0E] via-[#090B0E]/75 to-[#090B0E]/55" />
         </div>
@@ -85,11 +85,11 @@ export function HomePage() {
         <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 sm:py-28 lg:py-32">
           <div className="max-w-3xl space-y-6">
             <p className="text-sm font-medium text-emerald-400 tracking-wide">
-              UMC · Unofficial Minecraft Community
+              UMC · Competitive Minecraft Esports
             </p>
 
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-display font-bold tracking-tight text-white leading-[1.05]">
-              UMC – Unofficial Minecraft Championship
+              UMC – Unofficial Minecraft Community
             </h1>
 
             <p className="text-base sm:text-lg text-slate-300 leading-relaxed max-w-2xl">
@@ -237,9 +237,9 @@ export function HomePage() {
               <div className="h-full min-h-[260px] rounded-xl overflow-hidden border border-[#232B38] bg-[#11151B]">
                 <SafeImage
                   src={ABOUT_CREST_IMAGE}
-                  alt="UMC Obsidian and Emerald Championship Trophy"
+                  alt="UMC Obsidian and Emerald Community Trophy"
                   className="w-full h-full object-cover"
-                  fallbackTitle="UMC Championship Crest"
+                  fallbackTitle="UMC Community Crest"
                 />
               </div>
             </div>

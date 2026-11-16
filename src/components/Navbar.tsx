@@ -27,7 +27,7 @@ export function Navbar() {
           className="flex items-center gap-2.5 text-lg font-display font-bold tracking-wide text-slate-100 whitespace-nowrap shrink-0"
         >
           <UmcLogo className="w-7 h-7 shrink-0" />
-          <span>UMC Championship</span>
+          <span>UMC Community</span>
         </Link>
 
         {/* Zone 2: 5 concise single-line text links */}

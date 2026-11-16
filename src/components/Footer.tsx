@@ -12,7 +12,7 @@ export function Footer() {
               className="inline-flex items-center gap-2.5 text-lg font-display font-bold tracking-wide text-slate-100"
             >
               <UmcLogo className="w-7 h-7" />
-              <span>UMC – Unofficial Minecraft Championship</span>
+              <span>UMC – Unofficial Minecraft Community</span>
             </Link>
             <p className="text-sm text-slate-400 max-w-md leading-relaxed">
               Competitive Minecraft esports platform built by the Unofficial Minecraft Community.
@@ -80,7 +80,7 @@ export function Footer() {
 
         <div className="mt-10 pt-6 border-t border-[#161C26] flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
           <p>
-            © {new Date().getFullYear()} UMC – Unofficial Minecraft Championship. Not an official
+            © {new Date().getFullYear()} UMC – Unofficial Minecraft Community. Not an official
             Mojang or Microsoft product.
           </p>
           <div className="flex items-center gap-4">

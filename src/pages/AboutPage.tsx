@@ -13,7 +13,7 @@ export function AboutPage() {
               About UMC
             </p>
             <h1 className="text-4xl sm:text-5xl font-display font-bold text-white">
-              Unofficial Minecraft Community & Championship
+              UMC – Unofficial Minecraft Community
             </h1>
             <p className="text-base sm:text-lg text-slate-300 leading-relaxed">
               UMC is an independent competitive Minecraft tournament platform built to give
@@ -30,9 +30,9 @@ export function AboutPage() {
             <div className="rounded-xl overflow-hidden border border-[#232B38] bg-[#11151B]">
               <SafeImage
                 src={ABOUT_CREST_IMAGE}
-                alt="UMC Championship Emblem"
+                alt="UMC Community Emblem"
                 className="w-full aspect-[4/3] object-cover"
-                fallbackTitle="UMC Championship"
+                fallbackTitle="UMC Community"
               />
             </div>
           </div>
