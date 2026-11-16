@@ -1,0 +1,262 @@
+{
+  "entities": {
+    "AdminUser": {
+      "title": "AdminUser",
+      "description": "Authorized UMC platform administrator record.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 5, "maxLength": 120 },
+        "displayName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "username": { "type": "string", "minLength": 3, "maxLength": 40, "pattern": "^[a-zA-Z0-9_.\\-]+$" },
+        "addedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "displayName", "addedBy", "createdAt"]
+    },
+    "PlayerProfile": {
+      "title": "PlayerProfile",
+      "description": "Registered UMC player profile with PII and approval state.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "fullName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "username": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[a-zA-Z0-9_]+$" },
+        "usernameLower": { "type": "string", "minLength": 3, "maxLength": 30, "pattern": "^[a-z0-9_]+$" },
+        "email": { "type": "string", "format": "email", "minLength": 5, "maxLength": 120 },
+        "country": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "state": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "district": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "minecraftUsername": { "type": "string", "minLength": 3, "maxLength": 32, "pattern": "^[a-zA-Z0-9_ ]+$" },
+        "minecraftUsernameLower": { "type": "string", "minLength": 3, "maxLength": 32 },
+        "minecraftEdition": { "type": "string", "enum": ["JAVA", "BEDROCK", "BOTH"] },
+        "age": { "type": "integer" },
+        "contactDetails": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["PLAYER"] },
+        "registrationStatus": { "type": "string", "enum": ["PENDING_APPROVAL", "APPROVED", "REJECTED"] },
+        "accountStatus": { "type": "string", "enum": ["ACTIVE", "SUSPENDED"] },
+        "statusReason": { "type": "string", "minLength": 0, "maxLength": 300 },
+        "reviewedBy": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "reviewedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "uid", "fullName", "username", "usernameLower", "email",
+        "country", "state", "district", "minecraftUsername", "minecraftUsernameLower",
+        "minecraftEdition", "age", "contactDetails", "role",
+        "registrationStatus", "accountStatus", "statusReason", "reviewedBy",
+        "createdAt", "updatedAt"
+      ]
+    },
+    "UsernameReservation": {
+      "title": "UsernameReservation",
+      "description": "Uniqueness lock document for player usernames.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "createdAt"]
+    },
+    "SiteConfig": {
+      "title": "SiteConfig",
+      "description": "Global site registration and maintenance availability settings.",
+      "type": "object",
+      "properties": {
+        "registrationOpen": { "type": "boolean" },
+        "registrationClosedMessage": { "type": "string", "minLength": 0, "maxLength": 500 },
+        "maintenanceEnabled": { "type": "boolean" },
+        "maintenanceMessage": { "type": "string", "minLength": 0, "maxLength": 500 },
+        "maintenanceAnnouncement": { "type": "string", "minLength": 0, "maxLength": 500 },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "registrationOpen", "registrationClosedMessage",
+        "maintenanceEnabled", "maintenanceMessage", "maintenanceAnnouncement",
+        "updatedBy", "updatedAt"
+      ]
+    },
+    "SiteRules": {
+      "title": "SiteRules",
+      "description": "Official UMC rules and regulations sections managed by administrators.",
+      "type": "object",
+      "properties": {
+        "playerRules": { "type": "string", "minLength": 1, "maxLength": 5000 },
+        "tournamentRules": { "type": "string", "minLength": 1, "maxLength": 5000 },
+        "participationRequirements": { "type": "string", "minLength": 1, "maxLength": 5000 },
+        "disqualificationRules": { "type": "string", "minLength": 1, "maxLength": 5000 },
+        "fairPlayPolicy": { "type": "string", "minLength": 1, "maxLength": 5000 },
+        "updatedBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "playerRules", "tournamentRules", "participationRequirements",
+        "disqualificationRules", "fairPlayPolicy", "updatedBy", "updatedAt"
+      ]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Official UMC community or tournament announcement.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string", "minLength": 3, "maxLength": 140 },
+        "content": { "type": "string", "minLength": 5, "maxLength": 4000 },
+        "category": { "type": "string", "enum": ["GENERAL", "TOURNAMENT", "RULE_UPDATE", "MAINTENANCE", "URGENT"] },
+        "isImportant": { "type": "boolean" },
+        "publishedDate": { "type": "string", "minLength": 10, "maxLength": 10 },
+        "authorId": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "authorName": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "category", "isImportant", "publishedDate", "authorId", "authorName", "createdAt", "updatedAt"]
+    },
+    "Tournament": {
+      "title": "Tournament",
+      "description": "UMC esports tournament event.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "description": { "type": "string", "minLength": 10, "maxLength": 3000 },
+        "tournamentDate": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "registrationDeadline": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "status": { "type": "string", "enum": ["UPCOMING", "REGISTRATION_OPEN", "ONGOING", "COMPLETED", "CANCELLED"] },
+        "edition": { "type": "string", "enum": ["JAVA", "BEDROCK", "CROSSPLAY"] },
+        "format": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "maxParticipants": { "type": "integer" },
+        "winnerName": { "type": "string", "minLength": 0, "maxLength": 120 },
+        "winnerAnnouncement": { "type": "string", "minLength": 0, "maxLength": 1000 },
+        "createdBy": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "name", "description", "tournamentDate", "registrationDeadline",
+        "status", "edition", "format", "maxParticipants",
+        "winnerName", "winnerAnnouncement", "createdBy", "createdAt", "updatedAt"
+      ]
+    },
+    "TournamentParticipant": {
+      "title": "TournamentParticipant",
+      "description": "Approved player entry in a UMC tournament (no PII).",
+      "type": "object",
+      "properties": {
+        "playerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "tournamentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "username": { "type": "string", "minLength": 3, "maxLength": 30 },
+        "minecraftUsername": { "type": "string", "minLength": 3, "maxLength": 32 },
+        "minecraftEdition": { "type": "string", "enum": ["JAVA", "BEDROCK", "BOTH"] },
+        "teamId": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "teamName": { "type": "string", "minLength": 0, "maxLength": 80 },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["playerUid", "tournamentId", "username", "minecraftUsername", "minecraftEdition", "teamId", "teamName", "joinedAt"]
+    },
+    "TournamentTeam": {
+      "title": "TournamentTeam",
+      "description": "Competitive team within a tournament.",
+      "type": "object",
+      "properties": {
+        "tournamentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "tag": { "type": "string", "minLength": 1, "maxLength": 12 },
+        "captainUid": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "memberNames": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["tournamentId", "name", "tag", "captainUid", "memberNames", "createdAt", "updatedAt"]
+    },
+    "TournamentMatch": {
+      "title": "TournamentMatch",
+      "description": "Scheduled match and result within a tournament.",
+      "type": "object",
+      "properties": {
+        "tournamentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "round": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "participantA": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "participantB": { "type": "string", "minLength": 1, "maxLength": 80 },
+        "scheduledTime": { "type": "string", "minLength": 2, "maxLength": 60 },
+        "scoreA": { "type": "integer" },
+        "scoreB": { "type": "integer" },
+        "winner": { "type": "string", "minLength": 0, "maxLength": 80 },
+        "status": { "type": "string", "enum": ["SCHEDULED", "LIVE", "COMPLETED"] },
+        "notes": { "type": "string", "minLength": 0, "maxLength": 300 },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "tournamentId", "round", "participantA", "participantB", "scheduledTime",
+        "scoreA", "scoreB", "winner", "status", "notes", "createdAt", "updatedAt"
+      ]
+    },
+    "ContactMessage": {
+      "title": "ContactMessage",
+      "description": "Public inquiry submitted via Contact Us page.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "minLength": 2, "maxLength": 80 },
+        "email": { "type": "string", "format": "email", "minLength": 5, "maxLength": 120 },
+        "minecraftUsername": { "type": "string", "minLength": 0, "maxLength": 32 },
+        "subject": { "type": "string", "minLength": 3, "maxLength": 140 },
+        "message": { "type": "string", "minLength": 10, "maxLength": 3000 },
+        "status": { "type": "string", "enum": ["NEW", "RESOLVED"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "minecraftUsername", "subject", "message", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminUser" },
+      "description": "Authorized administrator registry."
+    },
+    "/players/{playerUid}": {
+      "schema": { "$ref": "#/entities/PlayerProfile" },
+      "description": "Registered player profiles with PII and approval state."
+    },
+    "/usernames/{usernameLower}": {
+      "schema": { "$ref": "#/entities/UsernameReservation" },
+      "description": "Unique username reservation locks."
+    },
+    "/mcUsernames/{mcUsernameLower}": {
+      "schema": { "$ref": "#/entities/UsernameReservation" },
+      "description": "Unique Minecraft username reservation locks."
+    },
+    "/siteConfig/{configId}": {
+      "schema": { "$ref": "#/entities/SiteConfig" },
+      "description": "Global site availability and registration toggle settings."
+    },
+    "/siteRules/{rulesId}": {
+      "schema": { "$ref": "#/entities/SiteRules" },
+      "description": "Official UMC rules and regulations."
+    },
+    "/announcements/{announcementId}": {
+      "schema": { "$ref": "#/entities/Announcement" },
+      "description": "Public UMC announcements and important notices."
+    },
+    "/tournaments/{tournamentId}": {
+      "schema": { "$ref": "#/entities/Tournament" },
+      "description": "Competitive Minecraft tournaments."
+    },
+    "/tournaments/{tournamentId}/participants/{playerUid}": {
+      "schema": { "$ref": "#/entities/TournamentParticipant" },
+      "description": "Approved player entries for a tournament."
+    },
+    "/tournaments/{tournamentId}/teams/{teamId}": {
+      "schema": { "$ref": "#/entities/TournamentTeam" },
+      "description": "Teams competing in a tournament."
+    },
+    "/tournaments/{tournamentId}/matches/{matchId}": {
+      "schema": { "$ref": "#/entities/TournamentMatch" },
+      "description": "Match schedule and results for a tournament."
+    },
+    "/contactMessages/{messageId}": {
+      "schema": { "$ref": "#/entities/ContactMessage" },
+      "description": "Visitor and player inquiries for administrators."
+    }
+  }
+}

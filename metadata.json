@@ -1,0 +1,6 @@
+{
+  "name": "UMC – Unofficial Minecraft Championship",
+  "description": "Official competitive esports platform for UMC – Unofficial Minecraft Community. Register as a player, compete in tournaments, read official rules, and track announcements.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
