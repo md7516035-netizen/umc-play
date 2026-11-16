@@ -11,6 +11,7 @@ export type TournamentStatus =
   | 'COMPLETED'
   | 'CANCELLED';
 export type MatchStatus = 'SCHEDULED' | 'LIVE' | 'COMPLETED';
+export type ProjectSubmissionStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
 export type AnnouncementCategory =
   | 'GENERAL'
   | 'TOURNAMENT'
@@ -89,8 +90,13 @@ export interface Tournament {
   id: string;
   name: string;
   description: string;
+  rules?: string;
+  imageUrl?: string;
   tournamentDate: string;
   registrationDeadline: string;
+  projectDeadline?: string;
+  projectDeadlineAt?: Timestamp | null;
+  isPublished?: boolean;
   status: TournamentStatus;
   edition: TournamentEdition;
   format: string;
@@ -136,6 +142,29 @@ export interface TournamentMatch {
   winner: string;
   status: MatchStatus;
   notes: string;
+  createdAt: Timestamp | null;
+  updatedAt: Timestamp | null;
+}
+
+export interface ProjectSubmission {
+  id: string;
+  tournamentId: string;
+  tournamentName: string;
+  playerUid: string;
+  playerUsername: string;
+  minecraftUsername: string;
+  title: string;
+  description: string;
+  screenshots: string[];
+  projectFileName: string;
+  projectFileSize: number;
+  projectFileMime: string;
+  projectFileChunkCount: number;
+  externalFileUrl: string;
+  status: ProjectSubmissionStatus;
+  adminNote: string;
+  reviewedBy: string;
+  reviewedAt?: Timestamp | null;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
 }

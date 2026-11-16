@@ -9,17 +9,20 @@
 6. **Backend-Enforced Tournament Gate**: Only players with `registrationStatus == 'APPROVED'` and `accountStatus == 'ACTIVE'` in `players/{uid}` can create a participant entry in `tournaments/{id}/participants/{uid}`, and only when the parent tournament has `status == 'REGISTRATION_OPEN'` and `siteConfig/global.registrationOpen == true`.
 7. **Admin Bootstrapping & Spoofing Guard**: Admin access via email requires `request.auth.token.email_verified == true` or explicit membership in `admins/{uid}`. Public creation of `admins/{uid}` is strictly denied.
 8. **Shadow Field Rejection**: Every entity validation helper enforces both `keys().hasAll(...)` and `keys().hasOnly(...)` plus strict type and string length bounds.
+9. **Tournament-Bound Project Submissions**: Every `projectSubmissions/{submissionId}` must reference an existing, published (`isPublished != false`), active (not `CANCELLED` or `COMPLETED`) tournament, submitted strictly on or before `projectDeadlineAt` (`request.time <= projectDeadlineAt`). Only `APPROVED` & `ACTIVE` players can submit, and every submission starts with `status == 'PENDING'`.
+10. **Project Privacy Gate**: Only `APPROVED` submissions are publicly readable; `PENDING` and `REJECTED` submissions and their file chunks are readable only by the owning player (`playerUid == request.auth.uid`) or an `isAdmin()`.
 
 ## 2. "Dirty Dozen" Adversarial Payloads (Must Return PERMISSION_DENIED)
 1. **Self-Approval on Registration**: `players/{uid}` create with `registrationStatus: "APPROVED"`.
 2. **Privilege Escalation on Registration**: `players/{uid}` create with `role: "ADMIN"` or `role: "COORDINATOR"`.
 3. **Self-Approval on Update**: `players/{uid}` update by owner changing `registrationStatus` from `"PENDING_APPROVAL"` to `"APPROVED"`.
 4. **Self-Reactivation from Suspension**: `players/{uid}` update by owner changing `accountStatus` from `"SUSPENDED"` to `"ACTIVE"`.
-5. **Shadow Field Injection**: `players/{uid}` create or update with extra ghost key `{ isVerified: true }`.
-6. **Unapproved Player Tournament Join**: `tournaments/{tid}/participants/{uid}` create when `players/{uid}.registrationStatus == "PENDING_APPROVAL"`.
-7. **Suspended Player Tournament Join**: `tournaments/{tid}/participants/{uid}` create when `players/{uid}.accountStatus == "SUSPENDED"`.
-8. **Closed Tournament Join**: `tournaments/{tid}/participants/{uid}` create when `tournaments/{tid}.status == "COMPLETED"`.
-9. **Public Admin Self-Provisioning**: `admins/{uid}` create by non-admin signed-in user.
-10. **PII Scraping List Query**: `players` `list` query by signed-in non-admin player.
-11. **Contact Inbox Scraping**: `contactMessages` `list` or `get` by non-admin user.
-12. **Resource Poisoning / Timestamp Spoofing**: `announcements` or `players` write with 50KB string or client-backdated `createdAt`.
+5. **Shadow Field Injection**: `players/{uid}` or `projectSubmissions/{sid}` create/update with extra ghost key `{ isVerified: true }`.
+6. **Unapproved Player Tournament Join / Project Submit**: `tournaments/{tid}/participants/{uid}` or `projectSubmissions/{sid}` create when `players/{uid}.registrationStatus == "PENDING_APPROVAL"`.
+7. **Suspended Player Tournament Join / Project Submit**: `tournaments/{tid}/participants/{uid}` or `projectSubmissions/{sid}` create when `players/{uid}.accountStatus == "SUSPENDED"`.
+8. **Draft / Deleted / Past-Deadline Tournament Submission**: `projectSubmissions/{sid}` create when parent tournament has `isPublished: false`, does not exist, or `request.time > projectDeadlineAt`.
+9. **Project Self-Approval**: `projectSubmissions/{sid}` create with `status: "APPROVED"`, or owner update changing `status` to `"APPROVED"`.
+10. **Pending Project Scraping**: `projectSubmissions` `list` or `get` for `PENDING`/`REJECTED` submission by non-owner non-admin user.
+11. **Contact Inbox & PII Scraping**: `players` or `contactMessages` `list` or `get` by non-admin user.
+12. **Resource Poisoning / Timestamp Spoofing**: `announcements`, `players`, or `projectSubmissions` write with oversized strings or client-backdated `createdAt`.
+

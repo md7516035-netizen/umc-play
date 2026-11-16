@@ -116,13 +116,18 @@
     },
     "Tournament": {
       "title": "Tournament",
-      "description": "UMC esports tournament event.",
+      "description": "UMC esports tournament event with draft/publish state and submission deadline.",
       "type": "object",
       "properties": {
         "name": { "type": "string", "minLength": 3, "maxLength": 120 },
         "description": { "type": "string", "minLength": 10, "maxLength": 3000 },
+        "rules": { "type": "string", "minLength": 0, "maxLength": 4000 },
+        "imageUrl": { "type": "string", "minLength": 0, "maxLength": 240000 },
         "tournamentDate": { "type": "string", "minLength": 4, "maxLength": 40 },
         "registrationDeadline": { "type": "string", "minLength": 4, "maxLength": 40 },
+        "projectDeadline": { "type": "string", "minLength": 0, "maxLength": 40 },
+        "projectDeadlineAt": { "type": "string", "format": "date-time" },
+        "isPublished": { "type": "boolean" },
         "status": { "type": "string", "enum": ["UPCOMING", "REGISTRATION_OPEN", "ONGOING", "COMPLETED", "CANCELLED"] },
         "edition": { "type": "string", "enum": ["JAVA", "BEDROCK", "CROSSPLAY"] },
         "format": { "type": "string", "minLength": 2, "maxLength": 80 },
@@ -193,6 +198,52 @@
         "scoreA", "scoreB", "winner", "status", "notes", "createdAt", "updatedAt"
       ]
     },
+    "ProjectSubmission": {
+      "title": "ProjectSubmission",
+      "description": "Tournament-specific player project submission with screenshots, project file metadata, and review status.",
+      "type": "object",
+      "properties": {
+        "tournamentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "tournamentName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "playerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "playerUsername": { "type": "string", "minLength": 3, "maxLength": 30 },
+        "minecraftUsername": { "type": "string", "minLength": 3, "maxLength": 32 },
+        "title": { "type": "string", "minLength": 3, "maxLength": 120 },
+        "description": { "type": "string", "minLength": 10, "maxLength": 4000 },
+        "screenshots": { "type": "array" },
+        "projectFileName": { "type": "string", "minLength": 0, "maxLength": 160 },
+        "projectFileSize": { "type": "integer" },
+        "projectFileMime": { "type": "string", "minLength": 0, "maxLength": 120 },
+        "projectFileChunkCount": { "type": "integer" },
+        "externalFileUrl": { "type": "string", "minLength": 0, "maxLength": 300 },
+        "status": { "type": "string", "enum": ["PENDING", "APPROVED", "REJECTED"] },
+        "adminNote": { "type": "string", "minLength": 0, "maxLength": 500 },
+        "reviewedBy": { "type": "string", "minLength": 0, "maxLength": 128 },
+        "reviewedAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": [
+        "tournamentId", "tournamentName", "playerUid", "playerUsername",
+        "minecraftUsername", "title", "description", "screenshots",
+        "projectFileName", "projectFileSize", "projectFileMime", "projectFileChunkCount",
+        "externalFileUrl", "status", "adminNote", "reviewedBy", "createdAt", "updatedAt"
+      ]
+    },
+    "ProjectFileChunk": {
+      "title": "ProjectFileChunk",
+      "description": "Base64 binary chunk for an uploaded tournament project file.",
+      "type": "object",
+      "properties": {
+        "submissionId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "tournamentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "playerUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "chunkIndex": { "type": "integer" },
+        "dataBase64": { "type": "string", "minLength": 1, "maxLength": 750000 },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["submissionId", "tournamentId", "playerUid", "chunkIndex", "dataBase64", "createdAt"]
+    },
     "ContactMessage": {
       "title": "ContactMessage",
       "description": "Public inquiry submitted via Contact Us page.",
@@ -253,6 +304,14 @@
     "/tournaments/{tournamentId}/matches/{matchId}": {
       "schema": { "$ref": "#/entities/TournamentMatch" },
       "description": "Match schedule and results for a tournament."
+    },
+    "/projectSubmissions/{submissionId}": {
+      "schema": { "$ref": "#/entities/ProjectSubmission" },
+      "description": "Tournament-specific player project submissions."
+    },
+    "/projectSubmissions/{submissionId}/chunks/{chunkId}": {
+      "schema": { "$ref": "#/entities/ProjectFileChunk" },
+      "description": "Chunked project file payload slices belonging to a submission."
     },
     "/contactMessages/{messageId}": {
       "schema": { "$ref": "#/entities/ContactMessage" },

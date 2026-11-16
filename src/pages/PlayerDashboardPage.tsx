@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { sendEmailVerification, sendPasswordResetEmail } from 'firebase/auth';
 import {
   collection,
@@ -12,39 +12,71 @@ import {
   serverTimestamp,
   setDoc,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  Download,
+  ExternalLink,
+  FolderKanban,
   LogOut,
   Megaphone,
   Settings,
   ShieldAlert,
   Trophy,
+  Upload,
   User,
+  X,
 } from 'lucide-react';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
-import { UMC_LIMITS } from '../constants/validation';
+import { TOURNAMENT_BANNER_IMAGE, UMC_LIMITS } from '../constants/validation';
+import { SafeImage } from '../components/SafeImage';
 import {
   formatAccountStatus,
   formatAnnouncementCategory,
+  formatBytes,
   formatRegistrationStatus,
+  formatSubmissionStatus,
   formatTimestamp,
   formatTournamentStatus,
+  isTournamentPublished,
+  isTournamentSubmissionOpen,
 } from '../utils/formatters';
-import type { Announcement, MinecraftEdition, Tournament } from '../types/umc';
+import { downloadSubmissionFile } from '../utils/mediaFiles';
+import type {
+  Announcement,
+  MinecraftEdition,
+  ProjectSubmission,
+  Tournament,
+} from '../types/umc';
+
+type DashboardTab = 'overview' | 'tournaments' | 'projects' | 'announcements' | 'settings';
 
 export function PlayerDashboardPage() {
   const { user, playerProfile, isAdmin, authReady, logout } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'tournaments' | 'announcements' | 'settings'>('overview');
+  const tabParam = searchParams.get('tab');
+  const initialTab: DashboardTab =
+    tabParam === 'tournaments' ||
+    tabParam === 'projects' ||
+    tabParam === 'announcements' ||
+    tabParam === 'settings'
+      ? tabParam
+      : 'overview';
+
+  const [activeTab, setActiveTab] = useState<DashboardTab>(initialTab);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [joinedIds, setJoinedIds] = useState<Record<string, boolean>>({});
+  const [mySubmissions, setMySubmissions] = useState<ProjectSubmission[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Profile edit form state
@@ -55,6 +87,18 @@ export function PlayerDashboardPage() {
   const [minecraftEdition, setMinecraftEdition] = useState<MinecraftEdition>('JAVA');
   const [age, setAge] = useState('');
   const [contactDetails, setContactDetails] = useState('');
+
+  useEffect(() => {
+    if (
+      tabParam === 'overview' ||
+      tabParam === 'tournaments' ||
+      tabParam === 'projects' ||
+      tabParam === 'announcements' ||
+      tabParam === 'settings'
+    ) {
+      setActiveTab(tabParam);
+    }
+  }, [tabParam]);
 
   useEffect(() => {
     if (playerProfile) {
@@ -76,7 +120,7 @@ export function PlayerDashboardPage() {
       const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Tournament));
       setTournaments(list);
 
-      // Check participation status for each tournament
+      // Check participation status for published tournaments
       const map: Record<string, boolean> = {};
       await Promise.all(
         list.map(async (t) => {
@@ -91,6 +135,17 @@ export function PlayerDashboardPage() {
       setJoinedIds(map);
     });
 
+    const subQ = query(collection(db, 'projectSubmissions'), where('playerUid', '==', user.uid));
+    const unsubSubs = onSnapshot(subQ, (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProjectSubmission));
+      list.sort((a, b) => {
+        const am = a.createdAt && typeof a.createdAt.toMillis === 'function' ? a.createdAt.toMillis() : 0;
+        const bm = b.createdAt && typeof b.createdAt.toMillis === 'function' ? b.createdAt.toMillis() : 0;
+        return bm - am;
+      });
+      setMySubmissions(list);
+    });
+
     const aQ = query(collection(db, 'announcements'), orderBy('createdAt', 'desc'));
     const unsubA = onSnapshot(aQ, (snap) => {
       setAnnouncements(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Announcement)));
@@ -98,9 +153,28 @@ export function PlayerDashboardPage() {
 
     return () => {
       unsubT();
+      unsubSubs();
       unsubA();
     };
   }, [authReady, user]);
+
+  const publishedTournaments = useMemo(
+    () => tournaments.filter((t) => isTournamentPublished(t)),
+    [tournaments]
+  );
+
+  const tournamentById = useMemo(() => {
+    const map = new Map<string, Tournament>();
+    for (const t of tournaments) {
+      map.set(t.id, t);
+    }
+    return map;
+  }, [tournaments]);
+
+  const selectTab = (tab: DashboardTab) => {
+    setActiveTab(tab);
+    setSearchParams(tab === 'overview' ? {} : { tab });
+  };
 
   if (!authReady) {
     return (
@@ -321,7 +395,22 @@ export function PlayerDashboardPage() {
     }
   };
 
-  const joinedTournaments = tournaments.filter((t) => joinedIds[t.id]);
+  const handleDownloadProject = async (sub: ProjectSubmission) => {
+    setFeedback(null);
+    setDownloadingId(sub.id);
+    try {
+      await downloadSubmissionFile(sub);
+    } catch (err) {
+      setFeedback({
+        type: 'error',
+        text: err instanceof Error ? err.message : 'Unable to download project file.',
+      });
+    } finally {
+      setDownloadingId(null);
+    }
+  };
+
+  const joinedTournaments = publishedTournaments.filter((t) => joinedIds[t.id]);
 
   return (
     <div className="bg-[#090B0E] text-slate-100 py-10 sm:py-14">
@@ -446,6 +535,11 @@ export function PlayerDashboardPage() {
           {[
             { id: 'overview', label: 'Overview', icon: User },
             { id: 'tournaments', label: 'Tournaments', icon: Trophy },
+            {
+              id: 'projects',
+              label: `My Projects (${mySubmissions.length})`,
+              icon: FolderKanban,
+            },
             { id: 'announcements', label: 'Announcements', icon: Megaphone },
             { id: 'settings', label: 'Profile Settings', icon: Settings },
           ].map((tab) => {
@@ -454,7 +548,7 @@ export function PlayerDashboardPage() {
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id as typeof activeTab)}
+                onClick={() => selectTab(tab.id as DashboardTab)}
                 className={`inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-md transition-colors whitespace-nowrap shrink-0 ${
                   activeTab === tab.id
                     ? 'bg-emerald-600 text-white'
@@ -513,48 +607,93 @@ export function PlayerDashboardPage() {
               </div>
             </div>
 
-            <div className="lg:col-span-5 p-6 rounded-xl bg-[#11151B] border border-[#232B38] space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-white">Your Tournaments</h2>
-                <span className="text-xs font-mono tabular-nums text-slate-400">
-                  {joinedTournaments.length} joined
-                </span>
-              </div>
-              {joinedTournaments.length === 0 ? (
-                <p className="text-sm text-slate-400">
-                  You have not joined any tournaments yet.
-                  {isApprovedAndActive
-                    ? ' Visit the Tournaments tab to enter an open championship.'
-                    : ''}
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {joinedTournaments.map((t) => {
-                    const st = formatTournamentStatus(t.status);
-                    return (
-                      <div
-                        key={t.id}
-                        className="p-4 rounded-lg bg-[#0B0E12] border border-[#1E2530] flex items-center justify-between gap-3"
-                      >
-                        <div>
-                          <div className="font-semibold text-white text-sm">{t.name}</div>
-                          <div className="text-xs text-slate-400 mt-0.5">
-                            <span className={st.colorClass}>{st.label}</span>
-                            <span aria-hidden="true"> · </span>
-                            <span className="font-mono tabular-nums">{t.tournamentDate}</span>
-                          </div>
-                        </div>
-                        <Link
-                          to={`/tournaments?id=${t.id}`}
-                          className="text-xs font-semibold text-emerald-400 hover:underline whitespace-nowrap shrink-0"
-                        >
-                          Details
-                        </Link>
-                      </div>
-                    );
-                  })}
+            <div className="lg:col-span-5 space-y-6">
+              <div className="p-6 rounded-xl bg-[#11151B] border border-[#232B38] space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-white">Your Tournaments</h2>
+                  <span className="text-xs font-mono tabular-nums text-slate-400">
+                    {joinedTournaments.length} joined
+                  </span>
                 </div>
-              )}
+                {joinedTournaments.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    You have not joined any tournaments yet.
+                    {isApprovedAndActive
+                      ? ' Visit the Tournaments tab to enter or upload a project.'
+                      : ''}
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {joinedTournaments.map((t) => {
+                      const st = formatTournamentStatus(t.status);
+                      return (
+                        <div
+                          key={t.id}
+                          className="p-4 rounded-lg bg-[#0B0E12] border border-[#1E2530] flex items-center justify-between gap-3"
+                        >
+                          <div>
+                            <div className="font-semibold text-white text-sm">{t.name}</div>
+                            <div className="text-xs text-slate-400 mt-0.5">
+                              <span className={st.colorClass}>{st.label}</span>
+                              <span aria-hidden="true"> · </span>
+                              <span className="font-mono tabular-nums">{t.tournamentDate}</span>
+                            </div>
+                          </div>
+                          <Link
+                            to={`/tournaments?id=${t.id}`}
+                            className="text-xs font-semibold text-emerald-400 hover:underline whitespace-nowrap shrink-0"
+                          >
+                            Details
+                          </Link>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="p-6 rounded-xl bg-[#11151B] border border-[#232B38] space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-xl font-bold text-white">Submitted Projects</h2>
+                  <button
+                    type="button"
+                    onClick={() => selectTab('projects')}
+                    className="text-xs font-semibold text-emerald-400 hover:underline"
+                  >
+                    View All ({mySubmissions.length})
+                  </button>
+                </div>
+                {mySubmissions.length === 0 ? (
+                  <p className="text-sm text-slate-400">
+                    No tournament projects submitted yet. Open a published tournament to upload a
+                    project.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {mySubmissions.slice(0, 3).map((sub) => {
+                      const st = formatSubmissionStatus(sub.status);
+                      return (
+                        <div
+                          key={sub.id}
+                          className="p-3.5 rounded-lg bg-[#0B0E12] border border-[#1E2530] flex items-center justify-between gap-3"
+                        >
+                          <div className="min-w-0">
+                            <div className="font-semibold text-white text-sm truncate">
+                              {sub.title}
+                            </div>
+                            <div className="text-xs text-slate-400 truncate mt-0.5">
+                              {sub.tournamentName}
+                            </div>
+                          </div>
+                          <span className={`text-xs font-semibold shrink-0 ${st.colorClass}`}>
+                            {st.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -563,80 +702,277 @@ export function PlayerDashboardPage() {
           <div className="space-y-4">
             {!isApprovedAndActive && (
               <div className="p-4 rounded-lg bg-[#11151B] border border-amber-500/30 text-sm text-amber-200">
-                Tournament entry is locked until your registration status is{' '}
+                Tournament entry and project uploads are locked until your registration status is{' '}
                 <strong>Approved</strong> and your account status is <strong>Active</strong>.
               </div>
             )}
 
-            {tournaments.length === 0 ? (
+            {publishedTournaments.length === 0 ? (
               <div className="p-8 rounded-xl bg-[#11151B] border border-[#232B38] text-sm text-slate-400">
-                No tournaments are currently listed.
+                No published tournaments are currently listed.
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {tournaments.map((t) => {
+                {publishedTournaments.map((t) => {
                   const st = formatTournamentStatus(t.status);
                   const isJoined = !!joinedIds[t.id];
                   const canJoin = isApprovedAndActive && t.status === 'REGISTRATION_OPEN';
+                  const subGate = isTournamentSubmissionOpen(t);
 
                   return (
                     <div
                       key={t.id}
-                      className="p-6 rounded-xl bg-[#11151B] border border-[#232B38] flex flex-col justify-between gap-4"
+                      className="rounded-xl overflow-hidden bg-[#11151B] border border-[#232B38] flex flex-col justify-between"
                     >
-                      <div className="space-y-2">
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                          <span className={`font-semibold ${st.colorClass}`}>{st.label}</span>
-                          <span aria-hidden="true">·</span>
-                          <span>{t.edition}</span>
-                          <span aria-hidden="true">·</span>
-                          <span className="font-mono tabular-nums">Event: {t.tournamentDate}</span>
+                      <div>
+                        <div className="h-36 relative overflow-hidden border-b border-[#1E2530]">
+                          <SafeImage
+                            src={t.imageUrl || TOURNAMENT_BANNER_IMAGE}
+                            alt={t.name}
+                            className="w-full h-full object-cover opacity-80"
+                            fallbackTitle={t.name}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-t from-[#11151B] via-[#11151B]/30 to-transparent" />
                         </div>
-                        <h3 className="text-xl font-bold text-white">{t.name}</h3>
-                        <p className="text-sm text-slate-400 line-clamp-3">{t.description}</p>
+
+                        <div className="p-6 pb-4 space-y-2">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                            <span className={`font-semibold ${st.colorClass}`}>{st.label}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{t.edition}</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono tabular-nums">Event: {t.tournamentDate}</span>
+                          </div>
+                          <h3 className="text-xl font-bold text-white">{t.name}</h3>
+                          <p className="text-sm text-slate-400 line-clamp-3">{t.description}</p>
+                          <p className="text-xs font-mono text-slate-400 pt-1">
+                            Project Deadline: {subGate.deadlineText}
+                          </p>
+                        </div>
                       </div>
 
-                      <div className="pt-3 border-t border-[#1E2530] flex flex-wrap items-center justify-between gap-3">
-                        <Link
-                          to={`/tournaments?id=${t.id}`}
-                          className="text-xs font-semibold text-slate-300 hover:text-white underline"
-                        >
-                          Brackets & Teams
-                        </Link>
-                        {isJoined ? (
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-emerald-400">
-                              Registered
-                            </span>
-                            {t.status === 'REGISTRATION_OPEN' && (
-                              <button
-                                type="button"
-                                disabled={actionBusy === t.id}
-                                onClick={() => handleLeaveTournament(t.id)}
-                                className="px-3 py-1.5 text-xs font-medium text-red-300 bg-red-950/40 hover:bg-red-950/70 border border-red-500/30 rounded-lg transition-colors"
-                              >
-                                Withdraw
-                              </button>
-                            )}
-                          </div>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled={!canJoin || actionBusy === t.id}
-                            onClick={() => handleJoinTournament(t.id)}
-                            className="px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 disabled:bg-[#1A212B] disabled:text-slate-500 rounded-lg transition-colors"
+                      <div className="px-6 pb-6 pt-3 border-t border-[#1E2530] space-y-3">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <Link
+                            to={`/tournaments?id=${t.id}`}
+                            className="px-3.5 py-2 text-xs font-semibold text-slate-200 bg-[#181E27] hover:bg-[#222A37] border border-[#2C374A] rounded-lg transition-colors whitespace-nowrap"
                           >
-                            {actionBusy === t.id
-                              ? 'Joining...'
-                              : t.status !== 'REGISTRATION_OPEN'
-                              ? 'Registration Closed'
-                              : !isApprovedAndActive
-                              ? 'Approval Required'
-                              : 'Join Tournament'}
-                          </button>
-                        )}
+                            View Tournament
+                          </Link>
+
+                          {subGate.open ? (
+                            <Link
+                              to={`/tournaments/${t.id}/submit`}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors whitespace-nowrap"
+                            >
+                              <Upload className="w-3.5 h-3.5" />
+                              Upload Project
+                            </Link>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              title={subGate.reason}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-500 bg-[#151A22] border border-[#232B38] rounded-lg cursor-not-allowed whitespace-nowrap"
+                            >
+                              <Clock className="w-3.5 h-3.5" />
+                              Submissions Closed
+                            </button>
+                          )}
+
+                          {isJoined ? (
+                            <div className="flex items-center gap-2 ml-auto">
+                              <span className="text-xs font-semibold text-emerald-400">
+                                Registered
+                              </span>
+                              {t.status === 'REGISTRATION_OPEN' && (
+                                <button
+                                  type="button"
+                                  disabled={actionBusy === t.id}
+                                  onClick={() => handleLeaveTournament(t.id)}
+                                  className="px-3 py-1.5 text-xs font-medium text-red-300 bg-red-950/40 hover:bg-red-950/70 border border-red-500/30 rounded-lg transition-colors"
+                                >
+                                  Withdraw
+                                </button>
+                              )}
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={!canJoin || actionBusy === t.id}
+                              onClick={() => handleJoinTournament(t.id)}
+                              className="ml-auto px-3.5 py-2 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 disabled:bg-[#1A212B] disabled:text-slate-500 disabled:border-[#232B38] rounded-lg transition-colors"
+                            >
+                              {actionBusy === t.id
+                                ? 'Joining...'
+                                : t.status !== 'REGISTRATION_OPEN'
+                                ? 'Bracket Closed'
+                                : !isApprovedAndActive
+                                ? 'Approval Required'
+                                : 'Join Bracket'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
+
+        {activeTab === 'projects' && (
+          <div className="space-y-4">
+            {mySubmissions.length === 0 ? (
+              <div className="p-8 rounded-xl bg-[#11151B] border border-[#232B38] text-center space-y-3">
+                <FolderKanban className="w-9 h-9 text-slate-500 mx-auto" />
+                <h2 className="text-lg font-bold text-white">No Projects Submitted Yet</h2>
+                <p className="text-sm text-slate-400 max-w-md mx-auto">
+                  All project submissions are linked to a specific tournament. Choose a published
+                  tournament and click <strong className="text-white">Upload Project</strong> to
+                  submit your entry.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => selectTab('tournaments')}
+                  className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg"
+                >
+                  Browse Tournaments
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {mySubmissions.map((sub) => {
+                  const st = formatSubmissionStatus(sub.status);
+                  const linkedTournament = tournamentById.get(sub.tournamentId);
+                  const isLinkedPublished = linkedTournament
+                    ? isTournamentPublished(linkedTournament)
+                    : false;
+
+                  return (
+                    <article
+                      key={sub.id}
+                      className="p-6 rounded-xl bg-[#11151B] border border-[#232B38] space-y-4"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                            <span className={`font-semibold ${st.colorClass}`}>{st.label}</span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono text-slate-300">
+                              IGN: {sub.minecraftUsername}
+                            </span>
+                            <span aria-hidden="true">·</span>
+                            <span className="font-mono tabular-nums">
+                              Submitted: {formatTimestamp(sub.createdAt)}
+                            </span>
+                          </div>
+                          <h3 className="text-xl font-bold text-white">{sub.title}</h3>
+                          <div className="text-xs text-slate-400">
+                            Tournament:{' '}
+                            {linkedTournament && isLinkedPublished ? (
+                              <Link
+                                to={`/tournaments?id=${linkedTournament.id}`}
+                                className="font-semibold text-emerald-400 hover:underline"
+                              >
+                                {linkedTournament.name}
+                              </Link>
+                            ) : linkedTournament ? (
+                              <span className="text-amber-300 font-medium">
+                                {linkedTournament.name} (Draft / Unpublished)
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">
+                                {sub.tournamentName} (Tournament deleted)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {linkedTournament &&
+                          isLinkedPublished &&
+                          isTournamentSubmissionOpen(linkedTournament).open && (
+                            <Link
+                              to={`/tournaments/${linkedTournament.id}/submit`}
+                              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-200 bg-[#181E27] hover:bg-[#222A37] border border-[#2C374A] rounded-lg self-start whitespace-nowrap shrink-0"
+                            >
+                              <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                              Submit New Version
+                            </Link>
+                          )}
+                      </div>
+
+                      <p className="text-sm text-slate-300 whitespace-pre-line leading-relaxed">
+                        {sub.description}
+                      </p>
+
+                      {sub.adminNote && (
+                        <div
+                          className={`p-3.5 rounded-lg border text-xs sm:text-sm ${
+                            sub.status === 'REJECTED'
+                              ? 'bg-red-950/35 border-red-500/35 text-red-200'
+                              : 'bg-emerald-950/30 border-emerald-500/30 text-emerald-200'
+                          }`}
+                        >
+                          <strong className="font-semibold">Administrator Note:</strong>{' '}
+                          {sub.adminNote}
+                        </div>
+                      )}
+
+                      {sub.screenshots && sub.screenshots.length > 0 && (
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-2xl">
+                          {sub.screenshots.map((shot, idx) => (
+                            <button
+                              key={`${sub.id}-my-shot-${idx}`}
+                              type="button"
+                              onClick={() =>
+                                setPreviewImage({
+                                  src: shot,
+                                  title: `${sub.title} — Screenshot ${idx + 1}`,
+                                })
+                              }
+                              className="aspect-video rounded-lg overflow-hidden border border-[#263040] bg-[#0B0E12]"
+                            >
+                              <img
+                                src={shot}
+                                alt={`${sub.title} screenshot ${idx + 1}`}
+                                className="w-full h-full object-cover"
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+
+                      <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-[#1A212C]">
+                        {sub.projectFileChunkCount > 0 && (
+                          <button
+                            type="button"
+                            disabled={downloadingId === sub.id}
+                            onClick={() => handleDownloadProject(sub)}
+                            className="inline-flex items-center gap-2 px-4 py-2 text-xs font-semibold text-white bg-[#181E27] hover:bg-[#222B38] border border-[#2C374A] rounded-lg disabled:opacity-50"
+                          >
+                            <Download className="w-3.5 h-3.5 text-emerald-400" />
+                            {downloadingId === sub.id
+                              ? 'Preparing File...'
+                              : `Download ${sub.projectFileName} (${formatBytes(
+                                  sub.projectFileSize
+                                )})`}
+                          </button>
+                        )}
+                        {sub.externalFileUrl && (
+                          <a
+                            href={sub.externalFileUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            External File Link
+                          </a>
+                        )}
+                      </div>
+                    </article>
                   );
                 })}
               </div>
@@ -827,6 +1163,40 @@ export function PlayerDashboardPage() {
           </div>
         )}
       </div>
+
+      {/* Screenshot Lightbox */}
+      {previewImage && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 p-4 flex items-center justify-center"
+          onClick={() => setPreviewImage(null)}
+        >
+          <div
+            className="max-w-4xl w-full rounded-xl bg-[#11151B] border border-[#263040] overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-4 py-3 border-b border-[#232B38] flex items-center justify-between gap-4">
+              <span className="text-sm font-semibold text-white truncate">
+                {previewImage.title}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPreviewImage(null)}
+                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1D2430]"
+                aria-label="Close image preview"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="p-3 bg-[#090B0E] flex items-center justify-center max-h-[80vh]">
+              <img
+                src={previewImage.src}
+                alt={previewImage.title}
+                className="max-h-[75vh] w-auto object-contain rounded"
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

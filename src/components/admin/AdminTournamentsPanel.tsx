@@ -6,12 +6,36 @@ import {
   onSnapshot,
   serverTimestamp,
   setDoc,
+  Timestamp,
   updateDoc,
 } from 'firebase/firestore';
-import { Edit3, Plus, Shield, Swords, Trash2, Trophy, Users } from 'lucide-react';
+import {
+  Edit3,
+  Eye,
+  EyeOff,
+  Image as ImageIcon,
+  Plus,
+  Save,
+  Shield,
+  Swords,
+  Trash2,
+  Trophy,
+  Upload,
+  Users,
+  X,
+} from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
+import { UMC_LIMITS } from '../../constants/validation';
 import { ConfirmModal } from '../ConfirmModal';
-import { formatMatchStatus, formatTournamentStatus } from '../../utils/formatters';
+import { SafeImage } from '../SafeImage';
+import {
+  formatDeadlineDisplay,
+  formatMatchStatus,
+  formatTournamentStatus,
+  isTournamentPublished,
+  parseDeadlineInputToDate,
+} from '../../utils/formatters';
+import { compressImageToDataUrl } from '../../utils/mediaFiles';
 import type {
   MatchStatus,
   PlayerProfile,
@@ -39,8 +63,13 @@ export function AdminTournamentsPanel({
   const [editingTournamentId, setEditingTournamentId] = useState<string | null>(null);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [rules, setRules] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
+  const [processingImage, setProcessingImage] = useState(false);
   const [tournamentDate, setTournamentDate] = useState('');
   const [registrationDeadline, setRegistrationDeadline] = useState('');
+  const [projectDeadline, setProjectDeadline] = useState('');
+  const [isPublished, setIsPublished] = useState(true);
   const [status, setStatus] = useState<TournamentStatus>('REGISTRATION_OPEN');
   const [edition, setEdition] = useState<TournamentEdition>('CROSSPLAY');
   const [format, setFormat] = useState('Solo / Squads');
@@ -48,6 +77,7 @@ export function AdminTournamentsPanel({
   const [winnerName, setWinnerName] = useState('');
   const [winnerAnnouncement, setWinnerAnnouncement] = useState('');
   const [savingTournament, setSavingTournament] = useState(false);
+  const [togglingPublishId, setTogglingPublishId] = useState<string | null>(null);
 
   const [deleteTournamentTarget, setDeleteTournamentTarget] = useState<Tournament | null>(null);
   const [selectedTournament, setSelectedTournament] = useState<Tournament | null>(null);
@@ -111,8 +141,12 @@ export function AdminTournamentsPanel({
     setEditingTournamentId(null);
     setName('');
     setDescription('');
+    setRules('');
+    setImageUrl('');
     setTournamentDate('');
     setRegistrationDeadline('');
+    setProjectDeadline('');
+    setIsPublished(true);
     setStatus('REGISTRATION_OPEN');
     setEdition('CROSSPLAY');
     setFormat('Solo / Squads');
@@ -125,8 +159,12 @@ export function AdminTournamentsPanel({
     setEditingTournamentId(t.id);
     setName(t.name);
     setDescription(t.description);
+    setRules(t.rules || '');
+    setImageUrl(t.imageUrl || '');
     setTournamentDate(t.tournamentDate);
     setRegistrationDeadline(t.registrationDeadline);
+    setProjectDeadline(t.projectDeadline || '');
+    setIsPublished(isTournamentPublished(t));
     setStatus(t.status);
     setEdition(t.edition);
     setFormat(t.format);
@@ -135,11 +173,41 @@ export function AdminTournamentsPanel({
     setWinnerAnnouncement(t.winnerAnnouncement);
   };
 
-  const handleSaveTournament = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleTournamentImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setProcessingImage(true);
+    try {
+      const dataUrl = await compressImageToDataUrl(file, 1280, UMC_LIMITS.IMAGE_DATA_URL_MAX_CHARS);
+      setImageUrl(dataUrl);
+      onFeedback('success', 'Tournament cover image compressed and attached.');
+    } catch (err) {
+      onFeedback('error', err instanceof Error ? err.message : 'Unable to process image.');
+    } finally {
+      setProcessingImage(false);
+    }
+  };
+
+  const saveTournamentWithPublishState = async (publishState: boolean) => {
     const maxP = Number(maxParticipants);
-    if (name.trim().length < 3 || description.trim().length < 10) {
+    if (
+      name.trim().length < UMC_LIMITS.TOURNAMENT_NAME_MIN ||
+      description.trim().length < UMC_LIMITS.TOURNAMENT_DESC_MIN
+    ) {
       onFeedback('error', 'Tournament name (min 3 chars) and description (min 10 chars) are required.');
+      return;
+    }
+    if (!tournamentDate.trim() || !registrationDeadline.trim()) {
+      onFeedback('error', 'Tournament date and registration deadline are required.');
+      return;
+    }
+    if (rules.trim().length > UMC_LIMITS.TOURNAMENT_RULES_MAX) {
+      onFeedback('error', `Tournament rules must be under ${UMC_LIMITS.TOURNAMENT_RULES_MAX} characters.`);
+      return;
+    }
+    if (imageUrl.trim().length > 240000) {
+      onFeedback('error', 'Tournament image URL/data is too large. Please upload a smaller image.');
       return;
     }
     if (!Number.isInteger(maxP) || maxP < 2 || maxP > 1000) {
@@ -147,43 +215,52 @@ export function AdminTournamentsPanel({
       return;
     }
 
+    const effectiveDeadlineStr = projectDeadline.trim() || registrationDeadline.trim();
+    const deadlineDate = parseDeadlineInputToDate(effectiveDeadlineStr);
+    const projectDeadlineAt = deadlineDate ? Timestamp.fromDate(deadlineDate) : null;
+
     setSavingTournament(true);
     try {
+      const sharedFields = {
+        name: name.trim(),
+        description: description.trim(),
+        rules: rules.trim(),
+        imageUrl: imageUrl.trim(),
+        tournamentDate: tournamentDate.trim(),
+        registrationDeadline: registrationDeadline.trim(),
+        projectDeadline: projectDeadline.trim(),
+        projectDeadlineAt,
+        isPublished: publishState,
+        status,
+        edition,
+        format: format.trim(),
+        maxParticipants: maxP,
+        winnerName: winnerName.trim(),
+        winnerAnnouncement: winnerAnnouncement.trim(),
+      };
+
       if (editingTournamentId) {
         const ref = doc(db, 'tournaments', editingTournamentId);
         try {
           await updateDoc(ref, {
-            name: name.trim(),
-            description: description.trim(),
-            tournamentDate: tournamentDate.trim(),
-            registrationDeadline: registrationDeadline.trim(),
-            status,
-            edition,
-            format: format.trim(),
-            maxParticipants: maxP,
-            winnerName: winnerName.trim(),
-            winnerAnnouncement: winnerAnnouncement.trim(),
+            ...sharedFields,
             updatedAt: serverTimestamp(),
           });
         } catch (err) {
           handleFirestoreError(err, OperationType.UPDATE, `tournaments/${editingTournamentId}`);
         }
-        onFeedback('success', 'Tournament updated.');
+        onFeedback(
+          'success',
+          publishState
+            ? 'Tournament updated and published to the website.'
+            : 'Tournament updated and saved as draft (hidden from public).'
+        );
       } else {
         const id = `tourn_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
         const ref = doc(db, 'tournaments', id);
         try {
           await setDoc(ref, {
-            name: name.trim(),
-            description: description.trim(),
-            tournamentDate: tournamentDate.trim(),
-            registrationDeadline: registrationDeadline.trim(),
-            status,
-            edition,
-            format: format.trim(),
-            maxParticipants: maxP,
-            winnerName: winnerName.trim(),
-            winnerAnnouncement: winnerAnnouncement.trim(),
+            ...sharedFields,
             createdBy: adminUid,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
@@ -191,13 +268,48 @@ export function AdminTournamentsPanel({
         } catch (err) {
           handleFirestoreError(err, OperationType.CREATE, `tournaments/${id}`);
         }
-        onFeedback('success', 'Tournament created.');
+        onFeedback(
+          'success',
+          publishState
+            ? 'Tournament created and published automatically on the public website.'
+            : 'Tournament saved as draft. Only administrators can view drafts.'
+        );
       }
       resetTournamentForm();
     } catch (err) {
       onFeedback('error', err instanceof Error ? err.message : 'Failed to save tournament.');
     } finally {
       setSavingTournament(false);
+    }
+  };
+
+  const handleSaveTournament = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await saveTournamentWithPublishState(isPublished);
+  };
+
+  const handleTogglePublish = async (t: Tournament) => {
+    const nextPublished = !isTournamentPublished(t);
+    setTogglingPublishId(t.id);
+    try {
+      try {
+        await updateDoc(doc(db, 'tournaments', t.id), {
+          isPublished: nextPublished,
+          updatedAt: serverTimestamp(),
+        });
+      } catch (err) {
+        handleFirestoreError(err, OperationType.UPDATE, `tournaments/${t.id}`);
+      }
+      onFeedback(
+        'success',
+        nextPublished
+          ? `"${t.name}" is now published on the public website.`
+          : `"${t.name}" was unpublished and moved to drafts.`
+      );
+    } catch (err) {
+      onFeedback('error', err instanceof Error ? err.message : 'Unable to update visibility.');
+    } finally {
+      setTogglingPublishId(null);
     }
   };
 
@@ -429,6 +541,78 @@ export function AdminTournamentsPanel({
             />
           </div>
 
+          <div className="space-y-1.5">
+            <label className="block text-sm font-medium text-slate-200">
+              Tournament Rules (Optional)
+            </label>
+            <textarea
+              rows={3}
+              maxLength={UMC_LIMITS.TOURNAMENT_RULES_MAX}
+              value={rules}
+              onChange={(e) => setRules(e.target.value)}
+              placeholder="Specific build themes, project file requirements, world version, and judging criteria..."
+              className="w-full px-3.5 py-2 text-sm bg-[#0B0E12] border border-[#263040] rounded-lg text-slate-100 focus:border-emerald-500 focus:outline-none"
+            />
+          </div>
+
+          {/* Tournament Image Upload / URL */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <label className="block text-sm font-medium text-slate-200">
+                Tournament Cover Image (Optional)
+              </label>
+              {imageUrl && (
+                <button
+                  type="button"
+                  onClick={() => setImageUrl('')}
+                  className="inline-flex items-center gap-1 text-xs text-red-400 hover:underline"
+                >
+                  <X className="w-3.5 h-3.5" />
+                  Remove
+                </button>
+              )}
+            </div>
+
+            {imageUrl && (
+              <div className="h-32 rounded-lg overflow-hidden border border-[#263040] bg-[#0B0E12]">
+                <SafeImage
+                  src={imageUrl}
+                  alt="Tournament banner preview"
+                  className="w-full h-full object-cover"
+                  fallbackTitle="Tournament Banner"
+                />
+              </div>
+            )}
+
+            <div className="flex flex-col sm:flex-row gap-2">
+              <label className="inline-flex items-center justify-center gap-2 px-3.5 py-2 text-xs font-semibold text-slate-100 bg-[#181E27] hover:bg-[#222A37] border border-[#2C374A] rounded-lg cursor-pointer whitespace-nowrap shrink-0">
+                <Upload className="w-3.5 h-3.5 text-emerald-400" />
+                {processingImage ? 'Compressing...' : 'Upload Image'}
+                <input
+                  type="file"
+                  accept="image/*"
+                  disabled={processingImage}
+                  onChange={handleTournamentImageUpload}
+                  className="hidden"
+                />
+              </label>
+              <div className="relative flex-1">
+                <ImageIcon className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={imageUrl.startsWith('data:') ? '' : imageUrl}
+                  onChange={(e) => setImageUrl(e.target.value)}
+                  placeholder={
+                    imageUrl.startsWith('data:')
+                      ? 'Uploaded image attached (or paste URL to replace)'
+                      : 'Or paste https:// image URL...'
+                  }
+                  className="w-full pl-8 pr-3 py-2 text-xs bg-[#0B0E12] border border-[#263040] rounded-lg text-slate-100 focus:border-emerald-500 focus:outline-none"
+                />
+              </div>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <label className="block text-xs font-medium text-slate-300">Tournament Date *</label>
@@ -452,6 +636,22 @@ export function AdminTournamentsPanel({
                 className="w-full px-3 py-2 text-sm bg-[#0B0E12] border border-[#263040] rounded-lg text-slate-100 font-mono"
               />
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="block text-xs font-medium text-slate-300">
+              Project Submission Deadline (Date & Time)
+            </label>
+            <input
+              type="datetime-local"
+              value={projectDeadline}
+              onChange={(e) => setProjectDeadline(e.target.value)}
+              className="w-full px-3 py-2 text-sm bg-[#0B0E12] border border-[#263040] rounded-lg text-slate-100 font-mono"
+            />
+            <p className="text-[11px] text-slate-500">
+              Players cannot upload projects after this deadline. Leave blank to use end of
+              Registration Deadline ({registrationDeadline || 'required above'}).
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -538,18 +738,30 @@ export function AdminTournamentsPanel({
             />
           </div>
 
-          <button
-            type="submit"
-            disabled={savingTournament}
-            className="w-full inline-flex items-center justify-center gap-2 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-50"
-          >
-            <Plus className="w-4 h-4" />
-            {savingTournament
-              ? 'Saving...'
-              : editingTournamentId
-              ? 'Update Tournament'
-              : 'Create Tournament'}
-          </button>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+            <button
+              type="button"
+              disabled={savingTournament || processingImage}
+              onClick={() => saveTournamentWithPublishState(true)}
+              className="inline-flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Plus className="w-4 h-4" />
+              {savingTournament
+                ? 'Saving...'
+                : editingTournamentId
+                ? 'Save & Publish'
+                : 'Publish Tournament'}
+            </button>
+            <button
+              type="button"
+              disabled={savingTournament || processingImage}
+              onClick={() => saveTournamentWithPublishState(false)}
+              className="inline-flex items-center justify-center gap-2 py-2.5 px-3 text-sm font-semibold text-slate-200 bg-[#181E27] hover:bg-[#222B38] border border-[#2C374A] rounded-lg transition-colors disabled:opacity-50"
+            >
+              <Save className="w-4 h-4" />
+              {editingTournamentId ? 'Save as Draft' : 'Save Draft'}
+            </button>
+          </div>
         </form>
 
         {/* Tournament List */}
@@ -561,6 +773,7 @@ export function AdminTournamentsPanel({
           ) : (
             tournaments.map((t) => {
               const st = formatTournamentStatus(t.status);
+              const published = isTournamentPublished(t);
               const isSelected = selectedTournament?.id === t.id;
               return (
                 <div
@@ -572,18 +785,54 @@ export function AdminTournamentsPanel({
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
-                    <div className="space-y-1">
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                        <span className={`font-semibold ${st.colorClass}`}>{st.label}</span>
-                        <span aria-hidden="true">·</span>
-                        <span>{t.edition}</span>
-                        <span aria-hidden="true">·</span>
-                        <span className="font-mono tabular-nums">{t.tournamentDate}</span>
+                    <div className="flex items-start gap-3.5 min-w-0">
+                      {t.imageUrl && (
+                        <div className="w-16 h-16 rounded-lg overflow-hidden border border-[#232B38] bg-[#0B0E12] shrink-0 hidden sm:block">
+                          <SafeImage
+                            src={t.imageUrl}
+                            alt={t.name}
+                            className="w-full h-full object-cover"
+                            fallbackTitle={t.name}
+                          />
+                        </div>
+                      )}
+                      <div className="space-y-1 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                          <span
+                            className={`font-semibold ${
+                              published ? 'text-emerald-400' : 'text-amber-400'
+                            }`}
+                          >
+                            {published ? 'Published' : 'Draft'}
+                          </span>
+                          <span aria-hidden="true">·</span>
+                          <span className={`font-semibold ${st.colorClass}`}>{st.label}</span>
+                          <span aria-hidden="true">·</span>
+                          <span>{t.edition}</span>
+                          <span aria-hidden="true">·</span>
+                          <span className="font-mono tabular-nums">{t.tournamentDate}</span>
+                        </div>
+                        <h3 className="text-xl font-bold text-white truncate">{t.name}</h3>
+                        <p className="text-xs text-slate-400 font-mono tabular-nums">
+                          Project Deadline: {formatDeadlineDisplay(t)}
+                        </p>
                       </div>
-                      <h3 className="text-xl font-bold text-white">{t.name}</h3>
                     </div>
 
                     <div className="flex items-center gap-1 shrink-0">
+                      <button
+                        type="button"
+                        disabled={togglingPublishId === t.id}
+                        onClick={() => handleTogglePublish(t)}
+                        title={published ? 'Unpublish (Move to Draft)' : 'Publish Tournament'}
+                        className="p-2 rounded-lg text-slate-300 hover:text-white hover:bg-[#1D2430] disabled:opacity-50"
+                      >
+                        {published ? (
+                          <EyeOff className="w-4 h-4 text-amber-300" />
+                        ) : (
+                          <Eye className="w-4 h-4 text-emerald-400" />
+                        )}
+                      </button>
                       <button
                         type="button"
                         onClick={() => startEditTournament(t)}
@@ -605,17 +854,35 @@ export function AdminTournamentsPanel({
 
                   <p className="text-sm text-slate-400 line-clamp-2">{t.description}</p>
 
-                  <div className="flex items-center justify-between pt-2 border-t border-[#1E2530]">
+                  <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-[#1E2530]">
                     <span className="text-xs text-slate-400">
                       {t.winnerName ? `Winner: ${t.winnerName}` : `Format: ${t.format}`}
                     </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedTournament(isSelected ? null : t)}
-                      className="px-3.5 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg"
-                    >
-                      {isSelected ? 'Close Bracket Manager' : 'Manage Roster, Teams & Matches'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        disabled={togglingPublishId === t.id}
+                        onClick={() => handleTogglePublish(t)}
+                        className={`px-3 py-1.5 text-xs font-semibold rounded-lg border transition-colors ${
+                          published
+                            ? 'text-amber-300 bg-amber-500/10 border-amber-500/30 hover:bg-amber-500/20'
+                            : 'text-emerald-300 bg-emerald-500/10 border-emerald-500/30 hover:bg-emerald-500/20'
+                        }`}
+                      >
+                        {togglingPublishId === t.id
+                          ? 'Updating...'
+                          : published
+                          ? 'Unpublish'
+                          : 'Publish Now'}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedTournament(isSelected ? null : t)}
+                        className="px-3.5 py-1.5 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg"
+                      >
+                        {isSelected ? 'Close Bracket Manager' : 'Manage Roster, Teams & Matches'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               );

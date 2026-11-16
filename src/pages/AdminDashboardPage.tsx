@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { collection, onSnapshot, orderBy, query } from 'firebase/firestore';
 import {
   BarChart3,
+  FolderKanban,
   Inbox,
   LogOut,
   Megaphone,
@@ -16,6 +17,7 @@ import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { AdminPlayersPanel } from '../components/admin/AdminPlayersPanel';
 import { AdminTournamentsPanel } from '../components/admin/AdminTournamentsPanel';
+import { AdminProjectsPanel } from '../components/admin/AdminProjectsPanel';
 import { AdminAnnouncementsPanel } from '../components/admin/AdminAnnouncementsPanel';
 import { AdminSiteControlsPanel } from '../components/admin/AdminSiteControlsPanel';
 import { AdminInboxAndAccessPanel } from '../components/admin/AdminInboxAndAccessPanel';
@@ -25,6 +27,7 @@ import type {
   Announcement,
   ContactMessage,
   PlayerProfile,
+  ProjectSubmission,
   Tournament,
 } from '../types/umc';
 
@@ -32,6 +35,7 @@ type AdminTab =
   | 'overview'
   | 'players'
   | 'tournaments'
+  | 'projects'
   | 'announcements'
   | 'controls'
   | 'inbox'
@@ -44,6 +48,7 @@ export function AdminDashboardPage() {
   const [activeTab, setActiveTab] = useState<AdminTab>('overview');
   const [players, setPlayers] = useState<PlayerProfile[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
+  const [projectSubmissions, setProjectSubmissions] = useState<ProjectSubmission[]>([]);
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [messages, setMessages] = useState<ContactMessage[]>([]);
   const [admins, setAdmins] = useState<AdminUser[]>([]);
@@ -62,6 +67,15 @@ export function AdminDashboardPage() {
       query(collection(db, 'tournaments'), orderBy('createdAt', 'desc')),
       (snap) => setTournaments(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Tournament)))
     );
+    const uProjects = onSnapshot(collection(db, 'projectSubmissions'), (snap) => {
+      const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProjectSubmission));
+      list.sort((a, b) => {
+        const am = a.createdAt && typeof a.createdAt.toMillis === 'function' ? a.createdAt.toMillis() : 0;
+        const bm = b.createdAt && typeof b.createdAt.toMillis === 'function' ? b.createdAt.toMillis() : 0;
+        return bm - am;
+      });
+      setProjectSubmissions(list);
+    });
     const uAnn = onSnapshot(
       query(collection(db, 'announcements'), orderBy('createdAt', 'desc')),
       (snap) => setAnnouncements(snap.docs.map((d) => ({ id: d.id, ...d.data() } as Announcement)))
@@ -77,6 +91,7 @@ export function AdminDashboardPage() {
     return () => {
       uPlayers();
       uTourn();
+      uProjects();
       uAnn();
       uMsg();
       uAdmins();
@@ -121,12 +136,19 @@ export function AdminDashboardPage() {
   const approvedCount = players.filter((p) => p.registrationStatus === 'APPROVED').length;
   const rejectedCount = players.filter((p) => p.registrationStatus === 'REJECTED').length;
   const suspendedCount = players.filter((p) => p.accountStatus === 'SUSPENDED').length;
+  const pendingProjectCount = projectSubmissions.filter((s) => s.status === 'PENDING').length;
   const openMsgCount = messages.filter((m) => m.status === 'NEW').length;
 
   const navItems: { id: AdminTab; label: string; icon: typeof BarChart3; count?: number }[] = [
     { id: 'overview', label: 'Statistics', icon: BarChart3 },
     { id: 'players', label: 'Players', icon: Users, count: pendingCount > 0 ? pendingCount : undefined },
     { id: 'tournaments', label: 'Tournaments', icon: Trophy },
+    {
+      id: 'projects',
+      label: 'Projects',
+      icon: FolderKanban,
+      count: pendingProjectCount > 0 ? pendingProjectCount : undefined,
+    },
     { id: 'announcements', label: 'Announcements', icon: Megaphone },
     { id: 'controls', label: 'Site & Rules', icon: Settings },
     { id: 'inbox', label: 'Inbox & Admins', icon: Inbox, count: openMsgCount > 0 ? openMsgCount : undefined },
@@ -227,7 +249,8 @@ export function AdminDashboardPage() {
                 { label: 'Rejected Players', value: rejectedCount, tone: 'text-red-400' },
                 { label: 'Suspended Accounts', value: suspendedCount, tone: 'text-orange-400' },
                 { label: 'Total Tournaments', value: tournaments.length, tone: 'text-white' },
-                { label: 'Announcements', value: announcements.length, tone: 'text-white' },
+                { label: 'Project Submissions', value: projectSubmissions.length, tone: 'text-emerald-400' },
+                { label: 'Pending Projects', value: pendingProjectCount, tone: 'text-amber-400' },
                 { label: 'Open Inquiries', value: openMsgCount, tone: 'text-sky-400' },
               ].map((stat) => (
                 <div
@@ -305,22 +328,22 @@ export function AdminDashboardPage() {
                   </button>
                   <button
                     type="button"
+                    onClick={() => setActiveTab('projects')}
+                    className="p-4 text-left rounded-lg bg-[#0B0E12] hover:bg-[#151B23] border border-[#1E2530] transition-colors"
+                  >
+                    <div className="font-semibold text-white text-sm">Review Projects</div>
+                    <div className="text-xs text-slate-400 mt-1">
+                      Approve, reject, or download player projects
+                    </div>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => setActiveTab('announcements')}
                     className="p-4 text-left rounded-lg bg-[#0B0E12] hover:bg-[#151B23] border border-[#1E2530] transition-colors"
                   >
                     <div className="font-semibold text-white text-sm">Post Announcement</div>
                     <div className="text-xs text-slate-400 mt-1">
                       Publish notices to homepage & feed
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab('controls')}
-                    className="p-4 text-left rounded-lg bg-[#0B0E12] hover:bg-[#151B23] border border-[#1E2530] transition-colors"
-                  >
-                    <div className="font-semibold text-white text-sm">Maintenance & Rules</div>
-                    <div className="text-xs text-slate-400 mt-1">
-                      Toggle 503 mode, registration & rules
                     </div>
                   </button>
                 </div>
@@ -341,6 +364,15 @@ export function AdminDashboardPage() {
           <AdminTournamentsPanel
             tournaments={tournaments}
             players={players}
+            adminUid={user.uid}
+            onFeedback={showFeedback}
+          />
+        )}
+
+        {activeTab === 'projects' && (
+          <AdminProjectsPanel
+            submissions={projectSubmissions}
+            tournaments={tournaments}
             adminUid={user.uid}
             onFeedback={showFeedback}
           />

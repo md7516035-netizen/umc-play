@@ -162,14 +162,20 @@ service cloud.firestore {
           'winnerName', 'winnerAnnouncement', 'createdBy', 'createdAt', 'updatedAt'
         ])
         && data.keys().hasOnly([
-          'name', 'description', 'tournamentDate', 'registrationDeadline',
+          'name', 'description', 'rules', 'imageUrl', 'tournamentDate', 'registrationDeadline',
+          'projectDeadline', 'projectDeadlineAt', 'isPublished',
           'status', 'edition', 'format', 'maxParticipants',
           'winnerName', 'winnerAnnouncement', 'createdBy', 'createdAt', 'updatedAt'
         ])
         && data.name is string && data.name.size() >= 3 && data.name.size() <= 120
         && data.description is string && data.description.size() >= 10 && data.description.size() <= 3000
+        && (!('rules' in data) || (data.rules is string && data.rules.size() <= 4000))
+        && (!('imageUrl' in data) || (data.imageUrl is string && data.imageUrl.size() <= 240000))
         && data.tournamentDate is string && data.tournamentDate.size() >= 4 && data.tournamentDate.size() <= 40
         && data.registrationDeadline is string && data.registrationDeadline.size() >= 4 && data.registrationDeadline.size() <= 40
+        && (!('projectDeadline' in data) || (data.projectDeadline is string && data.projectDeadline.size() <= 40))
+        && (!('projectDeadlineAt' in data) || data.projectDeadlineAt == null || data.projectDeadlineAt is timestamp)
+        && (!('isPublished' in data) || data.isPublished is bool)
         && data.status in ['UPCOMING', 'REGISTRATION_OPEN', 'ONGOING', 'COMPLETED', 'CANCELLED']
         && data.edition in ['JAVA', 'BEDROCK', 'CROSSPLAY']
         && data.format is string && data.format.size() >= 2 && data.format.size() <= 80
@@ -179,6 +185,59 @@ service cloud.firestore {
         && isValidId(data.createdBy)
         && data.createdAt is timestamp
         && data.updatedAt is timestamp;
+    }
+
+    function isValidProjectSubmission(data) {
+      return data.keys().hasAll([
+          'tournamentId', 'tournamentName', 'playerUid', 'playerUsername',
+          'minecraftUsername', 'title', 'description', 'screenshots',
+          'projectFileName', 'projectFileSize', 'projectFileMime', 'projectFileChunkCount',
+          'externalFileUrl', 'status', 'adminNote', 'reviewedBy', 'createdAt', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'tournamentId', 'tournamentName', 'playerUid', 'playerUsername',
+          'minecraftUsername', 'title', 'description', 'screenshots',
+          'projectFileName', 'projectFileSize', 'projectFileMime', 'projectFileChunkCount',
+          'externalFileUrl', 'status', 'adminNote', 'reviewedBy', 'reviewedAt', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.tournamentId)
+        && data.tournamentName is string && data.tournamentName.size() >= 1 && data.tournamentName.size() <= 120
+        && isValidId(data.playerUid)
+        && data.playerUsername is string && data.playerUsername.size() >= 3 && data.playerUsername.size() <= 30
+        && data.minecraftUsername is string && data.minecraftUsername.size() >= 3 && data.minecraftUsername.size() <= 32
+        && data.title is string && data.title.size() >= 3 && data.title.size() <= 120
+        && data.description is string && data.description.size() >= 10 && data.description.size() <= 4000
+        && data.screenshots is list && data.screenshots.size() >= 1 && data.screenshots.size() <= 3
+        && data.screenshots[0] is string && data.screenshots[0].size() >= 10 && data.screenshots[0].size() <= 240000
+        && (data.screenshots.size() < 2 || (data.screenshots[1] is string && data.screenshots[1].size() >= 10 && data.screenshots[1].size() <= 240000))
+        && (data.screenshots.size() < 3 || (data.screenshots[2] is string && data.screenshots[2].size() >= 10 && data.screenshots[2].size() <= 240000))
+        && data.projectFileName is string && data.projectFileName.size() <= 160
+        && data.projectFileSize is int && data.projectFileSize >= 0 && data.projectFileSize <= 3145728
+        && data.projectFileMime is string && data.projectFileMime.size() <= 120
+        && data.projectFileChunkCount is int && data.projectFileChunkCount >= 0 && data.projectFileChunkCount <= 9
+        && data.externalFileUrl is string && data.externalFileUrl.size() <= 300
+        && (data.projectFileChunkCount > 0 || data.externalFileUrl.size() >= 8)
+        && data.status in ['PENDING', 'APPROVED', 'REJECTED']
+        && data.adminNote is string && data.adminNote.size() <= 500
+        && data.reviewedBy is string && data.reviewedBy.size() <= 128
+        && (!('reviewedAt' in data) || data.reviewedAt == null || data.reviewedAt is timestamp)
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidProjectFileChunk(data) {
+      return data.keys().hasAll([
+          'submissionId', 'tournamentId', 'playerUid', 'chunkIndex', 'dataBase64', 'createdAt'
+        ])
+        && data.keys().hasOnly([
+          'submissionId', 'tournamentId', 'playerUid', 'chunkIndex', 'dataBase64', 'createdAt'
+        ])
+        && isValidId(data.submissionId)
+        && isValidId(data.tournamentId)
+        && isValidId(data.playerUid)
+        && data.chunkIndex is int && data.chunkIndex >= 0 && data.chunkIndex <= 8
+        && data.dataBase64 is string && data.dataBase64.size() >= 1 && data.dataBase64.size() <= 750000
+        && data.createdAt is timestamp;
     }
 
     function isValidParticipant(data) {
@@ -440,7 +499,8 @@ service cloud.firestore {
         && incoming().createdAt == existing().createdAt
         && incoming().updatedAt == request.time
         && incoming().diff(existing()).affectedKeys().hasOnly([
-          'name', 'description', 'tournamentDate', 'registrationDeadline',
+          'name', 'description', 'rules', 'imageUrl', 'tournamentDate', 'registrationDeadline',
+          'projectDeadline', 'projectDeadlineAt', 'isPublished',
           'status', 'edition', 'format', 'maxParticipants',
           'winnerName', 'winnerAnnouncement', 'updatedAt'
         ]);
@@ -531,6 +591,87 @@ service cloud.firestore {
             'scoreA', 'scoreB', 'winner', 'status', 'notes', 'updatedAt'
           ]);
         allow delete: if isAdmin() && isValidId(tournamentId) && isValidId(matchId);
+      }
+    }
+
+    // Tournament-Specific Project Submissions
+    match /projectSubmissions/{submissionId} {
+      allow get: if isValidId(submissionId) && (
+        isAdmin() ||
+        (isSignedIn() && existing().playerUid == request.auth.uid) ||
+        existing().status == 'APPROVED'
+      );
+      allow list: if isAdmin() || (isSignedIn() && existing().playerUid == request.auth.uid) || existing().status == 'APPROVED';
+      allow create: if isSignedIn()
+        && isValidId(submissionId)
+        && isValidProjectSubmission(incoming())
+        && incoming().playerUid == request.auth.uid
+        && incoming().status == 'PENDING'
+        && incoming().adminNote == ''
+        && incoming().reviewedBy == ''
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && exists(/databases/$(database)/documents/players/$(request.auth.uid))
+        && get(/databases/$(database)/documents/players/$(request.auth.uid)).data.registrationStatus == 'APPROVED'
+        && get(/databases/$(database)/documents/players/$(request.auth.uid)).data.accountStatus == 'ACTIVE'
+        && exists(/databases/$(database)/documents/tournaments/$(incoming().tournamentId))
+        && (
+          !('isPublished' in get(/databases/$(database)/documents/tournaments/$(incoming().tournamentId)).data) ||
+          get(/databases/$(database)/documents/tournaments/$(incoming().tournamentId)).data.isPublished == true
+        )
+        && !(get(/databases/$(database)/documents/tournaments/$(incoming().tournamentId)).data.status in ['CANCELLED', 'COMPLETED'])
+        && (
+          !('projectDeadlineAt' in get(/databases/$(database)/documents/tournaments/$(incoming().tournamentId)).data) ||
+          get(/databases/$(database)/documents/tournaments/$(incoming().tournamentId)).data.projectDeadlineAt == null ||
+          request.time <= get(/databases/$(database)/documents/tournaments/$(incoming().tournamentId)).data.projectDeadlineAt
+        );
+      allow update: if isAdmin()
+        && isValidId(submissionId)
+        && isValidProjectSubmission(incoming())
+        && incoming().playerUid == existing().playerUid
+        && incoming().tournamentId == existing().tournamentId
+        && incoming().tournamentName == existing().tournamentName
+        && incoming().playerUsername == existing().playerUsername
+        && incoming().minecraftUsername == existing().minecraftUsername
+        && incoming().title == existing().title
+        && incoming().description == existing().description
+        && incoming().screenshots == existing().screenshots
+        && incoming().projectFileName == existing().projectFileName
+        && incoming().projectFileSize == existing().projectFileSize
+        && incoming().projectFileMime == existing().projectFileMime
+        && incoming().projectFileChunkCount == existing().projectFileChunkCount
+        && incoming().externalFileUrl == existing().externalFileUrl
+        && incoming().createdAt == existing().createdAt
+        && incoming().reviewedBy == request.auth.uid
+        && incoming().reviewedAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'status', 'adminNote', 'reviewedBy', 'reviewedAt', 'updatedAt'
+        ]);
+      allow delete: if isAdmin() && isValidId(submissionId);
+
+      // Chunked Project File Payload (Master Gate against parent submission)
+      match /chunks/{chunkId} {
+        allow get: if isValidId(submissionId)
+          && isValidId(chunkId)
+          && exists(/databases/$(database)/documents/projectSubmissions/$(submissionId))
+          && (
+            isAdmin() ||
+            (isSignedIn() && get(/databases/$(database)/documents/projectSubmissions/$(submissionId)).data.playerUid == request.auth.uid) ||
+            get(/databases/$(database)/documents/projectSubmissions/$(submissionId)).data.status == 'APPROVED'
+          );
+        allow list: if false;
+        allow create: if isSignedIn()
+          && isValidId(submissionId)
+          && isValidId(chunkId)
+          && isValidProjectFileChunk(incoming())
+          && incoming().submissionId == submissionId
+          && incoming().playerUid == request.auth.uid
+          && incoming().createdAt == request.time
+          && existsAfter(/databases/$(database)/documents/projectSubmissions/$(submissionId))
+          && getAfter(/databases/$(database)/documents/projectSubmissions/$(submissionId)).data.playerUid == request.auth.uid;
+        allow update: if false;
+        allow delete: if isAdmin() && isValidId(submissionId) && isValidId(chunkId);
       }
     }
 

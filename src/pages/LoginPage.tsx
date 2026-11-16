@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 import { KeyRound, LogIn } from 'lucide-react';
 import { auth } from '../lib/firebase';
@@ -8,6 +8,10 @@ import { useAuth } from '../context/AuthContext';
 export function LoginPage() {
   const { user, playerProfile, isAdmin } = useAuth();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const rawRedirect = searchParams.get('redirect') || '';
+  const safeRedirect =
+    rawRedirect.startsWith('/') && !rawRedirect.startsWith('//') ? rawRedirect : '/dashboard';
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,10 +30,10 @@ export function LoginPage() {
           </p>
           <button
             type="button"
-            onClick={() => navigate('/dashboard')}
+            onClick={() => navigate(safeRedirect)}
             className="w-full py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
           >
-            Go to Player Dashboard
+            {safeRedirect !== '/dashboard' ? 'Continue to Page' : 'Go to Player Dashboard'}
           </button>
         </div>
       </div>
@@ -63,7 +67,7 @@ export function LoginPage() {
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password);
-      navigate('/dashboard');
+      navigate(safeRedirect);
     } catch (err: unknown) {
       const code = (err as { code?: string })?.code || '';
       if (

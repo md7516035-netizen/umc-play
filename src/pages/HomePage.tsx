@@ -7,7 +7,16 @@ import {
   orderBy,
   query,
 } from 'firebase/firestore';
-import { ArrowRight, Calendar, ChevronRight, Mail, ShieldCheck, Trophy } from 'lucide-react';
+import {
+  ArrowRight,
+  Calendar,
+  ChevronRight,
+  Clock,
+  Mail,
+  ShieldCheck,
+  Trophy,
+  Upload,
+} from 'lucide-react';
 import { db } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -19,6 +28,8 @@ import { SafeImage } from '../components/SafeImage';
 import {
   formatAnnouncementCategory,
   formatTournamentStatus,
+  isTournamentPublished,
+  isTournamentSubmissionOpen,
 } from '../utils/formatters';
 import type { Announcement, Tournament } from '../types/umc';
 
@@ -49,12 +60,15 @@ export function HomePage() {
     const tournQuery = query(
       collection(db, 'tournaments'),
       orderBy('createdAt', 'desc'),
-      limit(4)
+      limit(12)
     );
     const unsubTourn = onSnapshot(
       tournQuery,
       (snap) => {
-        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as Tournament));
+        const list = snap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as Tournament))
+          .filter((t) => isTournamentPublished(t))
+          .slice(0, 4);
         setTournaments(list);
       },
       () => {}
@@ -308,35 +322,67 @@ export function HomePage() {
               <div className="divide-y divide-[#1E2530]">
                 {tournaments.map((t) => {
                   const st = formatTournamentStatus(t.status);
+                  const subGate = isTournamentSubmissionOpen(t);
                   return (
                     <div
                       key={t.id}
-                      className="p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-[#151A22] transition-colors"
+                      className="p-6 flex flex-col lg:flex-row lg:items-center justify-between gap-5 hover:bg-[#151A22] transition-colors"
                     >
-                      <div className="space-y-1.5">
-                        <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                          <span className={`font-semibold ${st.colorClass}`}>{st.label}</span>
-                          <span aria-hidden="true">·</span>
-                          <span>{t.edition} Edition</span>
-                          <span aria-hidden="true">·</span>
-                          <span>{t.format}</span>
+                      <div className="flex items-start gap-4 min-w-0">
+                        <div className="w-20 h-20 rounded-lg overflow-hidden border border-[#232B38] bg-[#0B0E12] shrink-0 hidden sm:block">
+                          <SafeImage
+                            src={t.imageUrl || TOURNAMENT_BANNER_IMAGE}
+                            alt={t.name}
+                            className="w-full h-full object-cover"
+                            fallbackTitle={t.name}
+                          />
                         </div>
-                        <h3 className="text-xl font-bold text-white">{t.name}</h3>
-                        <p className="text-sm text-slate-400 line-clamp-2 max-w-2xl">
-                          {t.description}
-                        </p>
+                        <div className="space-y-1.5 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                            <span className={`font-semibold ${st.colorClass}`}>{st.label}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{t.edition} Edition</span>
+                            <span aria-hidden="true">·</span>
+                            <span>{t.format}</span>
+                          </div>
+                          <h3 className="text-xl font-bold text-white">{t.name}</h3>
+                          <p className="text-sm text-slate-400 line-clamp-2 max-w-2xl">
+                            {t.description}
+                          </p>
+                          <div className="flex flex-wrap items-center gap-2 text-xs font-mono tabular-nums text-slate-400 pt-0.5">
+                            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                            <span>Event: {t.tournamentDate}</span>
+                            <span aria-hidden="true">·</span>
+                            <span>Project Deadline: {subGate.deadlineText}</span>
+                          </div>
+                        </div>
                       </div>
-                      <div className="flex flex-col sm:flex-row md:flex-col items-start sm:items-center md:items-end gap-2 shrink-0">
-                        <div className="flex items-center gap-1.5 text-xs font-mono tabular-nums text-slate-300">
-                          <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                          <span>Event: {t.tournamentDate}</span>
-                        </div>
+                      <div className="flex flex-wrap items-center gap-2.5 shrink-0">
                         <Link
                           to={`/tournaments?id=${t.id}`}
-                          className="px-4 py-2 text-xs font-semibold text-emerald-300 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                          className="px-4 py-2.5 text-xs font-semibold text-slate-100 bg-[#181E27] hover:bg-[#222A37] border border-[#2C374A] rounded-lg transition-colors whitespace-nowrap shrink-0"
                         >
-                          View Details
+                          View Tournament
                         </Link>
+                        {subGate.open ? (
+                          <Link
+                            to={`/tournaments/${t.id}/submit`}
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors whitespace-nowrap shrink-0"
+                          >
+                            <Upload className="w-3.5 h-3.5" />
+                            Upload Project
+                          </Link>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            title={subGate.reason}
+                            className="inline-flex items-center gap-1.5 px-4 py-2.5 text-xs font-semibold text-slate-500 bg-[#151A22] border border-[#232B38] rounded-lg cursor-not-allowed whitespace-nowrap shrink-0"
+                          >
+                            <Clock className="w-3.5 h-3.5" />
+                            Submissions Closed
+                          </button>
+                        )}
                       </div>
                     </div>
                   );

@@ -10,6 +10,7 @@ import { PlayerDashboardPage } from './pages/PlayerDashboardPage';
 import { AdminLoginPage } from './pages/AdminLoginPage';
 import { AdminDashboardPage } from './pages/AdminDashboardPage';
 import { TournamentsPage } from './pages/TournamentsPage';
+import { ProjectSubmitPage } from './pages/ProjectSubmitPage';
 import { RulesPage } from './pages/RulesPage';
 import { AnnouncementsPage } from './pages/AnnouncementsPage';
 import { ContactPage } from './pages/ContactPage';
@@ -45,6 +46,7 @@ function AppShell() {
           <Route path="/admin" element={<AdminDashboardPage />} />
           <Route path="/admin-portal/dashboard" element={<AdminDashboardPage />} />
           <Route path="/tournaments" element={<TournamentsPage />} />
+          <Route path="/tournaments/:tournamentId/submit" element={<ProjectSubmitPage />} />
           <Route path="/rules" element={<RulesPage />} />
           <Route path="/announcements" element={<AnnouncementsPage />} />
           <Route path="/contact" element={<ContactPage />} />
