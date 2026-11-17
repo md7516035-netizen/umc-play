@@ -155,7 +155,6 @@ export interface ProjectSubmission {
   minecraftUsername: string;
   title: string;
   description: string;
-  screenshots: string[];
   projectFileName: string;
   projectFileSize: number;
   projectFileMime: string;

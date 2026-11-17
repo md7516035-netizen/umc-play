@@ -84,6 +84,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
+      setAuthReady(false);
+
       try {
         let adminFlag = false;
         const isBootstrapAdmin =

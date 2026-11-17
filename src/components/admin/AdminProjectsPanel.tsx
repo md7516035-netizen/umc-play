@@ -13,7 +13,6 @@ import {
   FolderKanban,
   Search,
   Trash2,
-  X,
   XCircle,
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../../lib/firebase';
@@ -52,7 +51,6 @@ export function AdminProjectsPanel({
   const [busyId, setBusyId] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<ProjectSubmission | null>(null);
-  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
 
   const tournamentMap = useMemo(() => {
     const map = new Map<string, Tournament>();
@@ -351,36 +349,6 @@ export function AdminProjectsPanel({
                           {sub.description}
                         </p>
 
-                        {/* Screenshots */}
-                        {sub.screenshots && sub.screenshots.length > 0 && (
-                          <div className="space-y-2">
-                            <div className="text-xs font-medium text-slate-400">
-                              Screenshots ({sub.screenshots.length}) — click to enlarge
-                            </div>
-                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-2xl">
-                              {sub.screenshots.map((shot, idx) => (
-                                <button
-                                  key={`${sub.id}-shot-${idx}`}
-                                  type="button"
-                                  onClick={() =>
-                                    setPreviewImage({
-                                      src: shot,
-                                      title: `${sub.title} — Screenshot ${idx + 1}`,
-                                    })
-                                  }
-                                  className="group relative aspect-video rounded-lg overflow-hidden border border-[#263040] bg-[#0B0E12] focus:outline-none focus:border-emerald-500"
-                                >
-                                  <img
-                                    src={shot}
-                                    alt={`${sub.title} screenshot ${idx + 1}`}
-                                    className="w-full h-full object-cover group-hover:opacity-90 transition-opacity"
-                                  />
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
                         {/* Attached Project File & External Link */}
                         <div className="flex flex-wrap items-center gap-3 pt-1">
                           {sub.projectFileChunkCount > 0 && (
@@ -467,46 +435,12 @@ export function AdminProjectsPanel({
         </div>
       )}
 
-      {/* Enlarged Screenshot Lightbox */}
-      {previewImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/85 p-4 flex items-center justify-center"
-          onClick={() => setPreviewImage(null)}
-        >
-          <div
-            className="max-w-4xl w-full rounded-xl bg-[#11151B] border border-[#263040] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-4 py-3 border-b border-[#232B38] flex items-center justify-between gap-4">
-              <span className="text-sm font-semibold text-white truncate">
-                {previewImage.title}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPreviewImage(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1D2430]"
-                aria-label="Close image preview"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-3 bg-[#090B0E] flex items-center justify-center max-h-[80vh]">
-              <img
-                src={previewImage.src}
-                alt={previewImage.title}
-                className="max-h-[75vh] w-auto object-contain rounded"
-              />
-            </div>
-          </div>
-        </div>
-      )}
-
       <ConfirmModal
         open={!!deleteTarget}
         title="Delete Project Submission"
         description={`Permanently delete project "${deleteTarget?.title || ''}" submitted by @${
           deleteTarget?.playerUsername || ''
-        }? This removes all attached screenshots and project file chunks.`}
+        }? This removes the project submission and any uploaded file chunks.`}
         confirmLabel="Delete Project"
         danger
         loading={busyId === deleteTarget?.id}

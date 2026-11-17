@@ -52,7 +52,7 @@ export async function compressImageToDataUrl(
       height = Math.max(200, Math.round(height * 0.7));
     }
 
-    throw new Error(`Image "${file.name}" is too complex to compress cleanly. Choose a smaller screenshot.`);
+    throw new Error(`Image "${file.name}" is too complex to compress cleanly. Choose a smaller image.`);
   } finally {
     URL.revokeObjectURL(objectUrl);
   }

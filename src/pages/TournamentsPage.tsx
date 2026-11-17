@@ -24,7 +24,6 @@ import {
   Trophy,
   Upload,
   Users,
-  X,
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
@@ -69,7 +68,6 @@ export function TournamentsPage() {
   const [joinMsg, setJoinMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState('');
-  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
 
   useEffect(() => {
     const q = query(collection(db, 'tournaments'), orderBy('createdAt', 'desc'));
@@ -592,30 +590,6 @@ export function TournamentsPage() {
                           className="p-5 rounded-xl bg-[#0B0E12] border border-[#1E2530] flex flex-col justify-between gap-4"
                         >
                           <div className="space-y-3">
-                            {sub.screenshots && sub.screenshots.length > 0 && (
-                              <div className="grid grid-cols-3 gap-2">
-                                {sub.screenshots.map((shot, idx) => (
-                                  <button
-                                    key={`${sub.id}-pub-shot-${idx}`}
-                                    type="button"
-                                    onClick={() =>
-                                      setPreviewImage({
-                                        src: shot,
-                                        title: `${sub.title} — Screenshot ${idx + 1}`,
-                                      })
-                                    }
-                                    className="aspect-video rounded-md overflow-hidden border border-[#232B38] bg-[#11151B]"
-                                  >
-                                    <img
-                                      src={shot}
-                                      alt={`${sub.title} screenshot ${idx + 1}`}
-                                      className="w-full h-full object-cover"
-                                    />
-                                  </button>
-                                ))}
-                              </div>
-                            )}
-
                             <div className="space-y-1">
                               <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
                                 <span className="font-semibold text-emerald-400">Approved</span>
@@ -862,40 +836,6 @@ export function TournamentsPage() {
           </div>
         )}
       </div>
-
-      {/* Screenshot Enlargement Modal */}
-      {previewImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/85 p-4 flex items-center justify-center"
-          onClick={() => setPreviewImage(null)}
-        >
-          <div
-            className="max-w-4xl w-full rounded-xl bg-[#11151B] border border-[#263040] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-4 py-3 border-b border-[#232B38] flex items-center justify-between gap-4">
-              <span className="text-sm font-semibold text-white truncate">
-                {previewImage.title}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPreviewImage(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1D2430]"
-                aria-label="Close image preview"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-3 bg-[#090B0E] flex items-center justify-center max-h-[80vh]">
-              <img
-                src={previewImage.src}
-                alt={previewImage.title}
-                className="max-h-[75vh] w-auto object-contain rounded"
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -7,12 +7,10 @@ import {
   CheckCircle2,
   Clock,
   FileArchive,
-  ImagePlus,
   Lock,
   ShieldAlert,
   Trophy,
   Upload,
-  X,
 } from 'lucide-react';
 import { db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
@@ -24,7 +22,7 @@ import {
   isTournamentPublished,
   isTournamentSubmissionOpen,
 } from '../utils/formatters';
-import { compressImageToDataUrl, readFileAsBase64Chunks } from '../utils/mediaFiles';
+import { readFileAsBase64Chunks } from '../utils/mediaFiles';
 import type { Tournament } from '../types/umc';
 
 export function ProjectSubmitPage() {
@@ -39,8 +37,6 @@ export function ProjectSubmitPage() {
   const [description, setDescription] = useState('');
   const [minecraftUsername, setMinecraftUsername] = useState('');
   const [ignInitialized, setIgnInitialized] = useState(false);
-  const [screenshots, setScreenshots] = useState<string[]>([]);
-  const [processingShots, setProcessingShots] = useState(false);
   const [projectFile, setProjectFile] = useState<File | null>(null);
   const [externalFileUrl, setExternalFileUrl] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -85,45 +81,6 @@ export function ProjectSubmitPage() {
       setIgnInitialized(true);
     }
   }, [playerProfile, ignInitialized]);
-
-  const handleScreenshotsSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const fileList = e.target.files;
-    e.target.value = '';
-    if (!fileList || fileList.length === 0) return;
-
-    setFormError('');
-    const remainingSlots = UMC_LIMITS.PROJECT_MAX_SCREENSHOTS - screenshots.length;
-    if (remainingSlots <= 0) {
-      setFormError(`Maximum ${UMC_LIMITS.PROJECT_MAX_SCREENSHOTS} screenshots allowed.`);
-      return;
-    }
-
-    const selectedFiles = Array.from(fileList).slice(0, remainingSlots);
-    setProcessingShots(true);
-    try {
-      const compressed: string[] = [];
-      for (const file of selectedFiles) {
-        const dataUrl = await compressImageToDataUrl(
-          file,
-          1280,
-          UMC_LIMITS.IMAGE_DATA_URL_MAX_CHARS
-        );
-        compressed.push(dataUrl);
-      }
-      setScreenshots((prev) =>
-        [...prev, ...compressed].slice(0, UMC_LIMITS.PROJECT_MAX_SCREENSHOTS)
-      );
-      if (fileList.length > remainingSlots) {
-        setFormError(
-          `Only ${UMC_LIMITS.PROJECT_MAX_SCREENSHOTS} screenshots can be attached per submission.`
-        );
-      }
-    } catch (err) {
-      setFormError(err instanceof Error ? err.message : 'Unable to process selected screenshot.');
-    } finally {
-      setProcessingShots(false);
-    }
-  };
 
   const handleProjectFileSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] || null;
@@ -188,10 +145,6 @@ export function ProjectSubmitPage() {
       );
       return;
     }
-    if (screenshots.length < 1) {
-      setFormError('Please upload at least 1 screenshot of your project (up to 3).');
-      return;
-    }
     if (!projectFile && cleanUrl.length < 8) {
       setFormError(
         'Please upload your project file (up to 3 MB) or provide a valid external download URL.'
@@ -218,7 +171,6 @@ export function ProjectSubmitPage() {
         minecraftUsername: cleanIgn,
         title: cleanTitle,
         description: cleanDesc,
-        screenshots,
         projectFileName: projectFile ? projectFile.name.slice(0, 160) : '',
         projectFileSize: projectFile ? projectFile.size : 0,
         projectFileMime: projectFile
@@ -582,64 +534,6 @@ export function ProjectSubmitPage() {
               />
             </div>
 
-            {/* Screenshots Upload */}
-            <div className="space-y-3">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label className="block text-sm font-medium text-slate-200">
-                  Project Screenshots * (1 to {UMC_LIMITS.PROJECT_MAX_SCREENSHOTS} images)
-                </label>
-                <span className="text-xs font-mono text-slate-400">
-                  {screenshots.length}/{UMC_LIMITS.PROJECT_MAX_SCREENSHOTS} attached
-                </span>
-              </div>
-
-              {screenshots.length > 0 && (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  {screenshots.map((shot, idx) => (
-                    <div
-                      key={`shot-preview-${idx}`}
-                      className="relative aspect-video rounded-lg overflow-hidden border border-[#263040] bg-[#0B0E12]"
-                    >
-                      <img
-                        src={shot}
-                        alt={`Screenshot ${idx + 1}`}
-                        className="w-full h-full object-cover"
-                      />
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setScreenshots((prev) => prev.filter((_, i) => i !== idx))
-                        }
-                        aria-label={`Remove screenshot ${idx + 1}`}
-                        className="absolute top-2 right-2 p-1.5 rounded-md bg-black/75 text-white hover:bg-red-600 transition-colors"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {screenshots.length < UMC_LIMITS.PROJECT_MAX_SCREENSHOTS && (
-                <label className="flex items-center justify-center gap-2.5 px-4 py-3.5 rounded-lg bg-[#0B0E12] hover:bg-[#141922] border border-dashed border-[#2C374A] cursor-pointer text-sm text-slate-200 transition-colors">
-                  <ImagePlus className="w-4 h-4 text-emerald-400 shrink-0" />
-                  <span>
-                    {processingShots
-                      ? 'Processing & compressing screenshots...'
-                      : 'Select Screenshots from Device (PNG / JPG / WebP)'}
-                  </span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    disabled={processingShots}
-                    onChange={handleScreenshotsSelected}
-                    className="hidden"
-                  />
-                </label>
-              )}
-            </div>
-
             {/* Project File Upload & Optional External URL */}
             <div className="space-y-4 p-4 sm:p-5 rounded-xl bg-[#0B0E12] border border-[#1E2530]">
               <div className="space-y-1">
@@ -710,7 +604,7 @@ export function ProjectSubmitPage() {
               </p>
               <button
                 type="submit"
-                disabled={submitting || processingShots}
+                disabled={submitting}
                 className="inline-flex items-center justify-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap shrink-0"
               >
                 <Upload className="w-4 h-4" />

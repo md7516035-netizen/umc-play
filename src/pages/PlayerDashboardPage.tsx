@@ -28,7 +28,6 @@ import {
   Trophy,
   Upload,
   User,
-  X,
 } from 'lucide-react';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
@@ -76,7 +75,6 @@ export function PlayerDashboardPage() {
   const [announcements, setAnnouncements] = useState<Announcement[]>([]);
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
-  const [previewImage, setPreviewImage] = useState<{ src: string; title: string } | null>(null);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Profile edit form state
@@ -920,30 +918,6 @@ export function PlayerDashboardPage() {
                         </div>
                       )}
 
-                      {sub.screenshots && sub.screenshots.length > 0 && (
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 max-w-2xl">
-                          {sub.screenshots.map((shot, idx) => (
-                            <button
-                              key={`${sub.id}-my-shot-${idx}`}
-                              type="button"
-                              onClick={() =>
-                                setPreviewImage({
-                                  src: shot,
-                                  title: `${sub.title} — Screenshot ${idx + 1}`,
-                                })
-                              }
-                              className="aspect-video rounded-lg overflow-hidden border border-[#263040] bg-[#0B0E12]"
-                            >
-                              <img
-                                src={shot}
-                                alt={`${sub.title} screenshot ${idx + 1}`}
-                                className="w-full h-full object-cover"
-                              />
-                            </button>
-                          ))}
-                        </div>
-                      )}
-
                       <div className="flex flex-wrap items-center gap-3 pt-2 border-t border-[#1A212C]">
                         {sub.projectFileChunkCount > 0 && (
                           <button
@@ -1163,40 +1137,6 @@ export function PlayerDashboardPage() {
           </div>
         )}
       </div>
-
-      {/* Screenshot Lightbox */}
-      {previewImage && (
-        <div
-          className="fixed inset-0 z-50 bg-black/85 p-4 flex items-center justify-center"
-          onClick={() => setPreviewImage(null)}
-        >
-          <div
-            className="max-w-4xl w-full rounded-xl bg-[#11151B] border border-[#263040] overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-4 py-3 border-b border-[#232B38] flex items-center justify-between gap-4">
-              <span className="text-sm font-semibold text-white truncate">
-                {previewImage.title}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPreviewImage(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-[#1D2430]"
-                aria-label="Close image preview"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="p-3 bg-[#090B0E] flex items-center justify-center max-h-[80vh]">
-              <img
-                src={previewImage.src}
-                alt={previewImage.title}
-                className="max-h-[75vh] w-auto object-contain rounded"
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

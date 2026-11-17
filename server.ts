@@ -175,6 +175,7 @@ async function startServer() {
     }
 
     const body = req.body as Record<string, unknown>;
+    const existingAuthAccount = body.existingAuthAccount === true;
     const fullName = String(body.fullName || '').trim();
     const username = String(body.username || '').trim();
     const email = String(body.email || '').trim().toLowerCase();
@@ -203,13 +204,15 @@ async function startServer() {
       res.status(400).json({ valid: false, error: 'Please provide a valid email address.' });
       return;
     }
-    if (password.length < 8 || password.length > 128) {
-      res.status(400).json({ valid: false, error: 'Password must be at least 8 characters long.' });
-      return;
-    }
-    if (password !== confirmPassword) {
-      res.status(400).json({ valid: false, error: 'Password and confirm password do not match.' });
-      return;
+    if (!existingAuthAccount) {
+      if (password.length < 8 || password.length > 128) {
+        res.status(400).json({ valid: false, error: 'Password must be at least 8 characters long.' });
+        return;
+      }
+      if (password !== confirmPassword) {
+        res.status(400).json({ valid: false, error: 'Password and confirm password do not match.' });
+        return;
+      }
     }
     if (country.length < 2 || country.length > 60 || state.length < 2 || state.length > 60 || district.length < 2 || district.length > 60) {
       res.status(400).json({ valid: false, error: 'Country, state, and district must each be 2–60 characters.' });

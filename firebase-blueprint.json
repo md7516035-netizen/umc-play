@@ -200,7 +200,7 @@
     },
     "ProjectSubmission": {
       "title": "ProjectSubmission",
-      "description": "Tournament-specific player project submission with screenshots, project file metadata, and review status.",
+      "description": "Tournament-specific player project submission with project file metadata and review status.",
       "type": "object",
       "properties": {
         "tournamentId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
@@ -210,7 +210,6 @@
         "minecraftUsername": { "type": "string", "minLength": 3, "maxLength": 32 },
         "title": { "type": "string", "minLength": 3, "maxLength": 120 },
         "description": { "type": "string", "minLength": 10, "maxLength": 4000 },
-        "screenshots": { "type": "array" },
         "projectFileName": { "type": "string", "minLength": 0, "maxLength": 160 },
         "projectFileSize": { "type": "integer" },
         "projectFileMime": { "type": "string", "minLength": 0, "maxLength": 120 },
@@ -225,7 +224,7 @@
       },
       "required": [
         "tournamentId", "tournamentName", "playerUid", "playerUsername",
-        "minecraftUsername", "title", "description", "screenshots",
+        "minecraftUsername", "title", "description",
         "projectFileName", "projectFileSize", "projectFileMime", "projectFileChunkCount",
         "externalFileUrl", "status", "adminNote", "reviewedBy", "createdAt", "updatedAt"
       ]

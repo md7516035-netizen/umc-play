@@ -1,15 +1,53 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from 'firebase/auth';
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, type User } from 'firebase/auth';
 import { doc, getDoc, serverTimestamp, writeBatch } from 'firebase/firestore';
-import { Lock, UserPlus } from 'lucide-react';
+import { CheckCircle2, Eye, EyeOff, Lock, ShieldCheck, UserPlus } from 'lucide-react';
 import { auth, db, handleFirestoreError, OperationType } from '../lib/firebase';
 import { useAuth } from '../context/AuthContext';
 import { normalizeMcKey, UMC_LIMITS, UMC_PATTERNS } from '../constants/validation';
 import type { MinecraftEdition } from '../types/umc';
 
+function mapRegistrationError(err: unknown): string {
+  const code = (err as { code?: string })?.code || '';
+  if (code === 'auth/email-already-in-use') {
+    return 'An account with this email address already exists. Sign in on the Player Login page instead.';
+  }
+  if (code === 'auth/invalid-email') {
+    return 'Please enter a valid email address.';
+  }
+  if (code === 'auth/weak-password') {
+    return 'Password is too weak. Use at least 8 characters with letters and numbers.';
+  }
+  if (code === 'auth/operation-not-allowed') {
+    return 'Email/Password sign-in is not yet enabled in Firebase Console. An administrator must enable the Email/Password provider in Firebase Authentication.';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many registration attempts right now. Please wait a moment and try again.';
+  }
+
+  if (err instanceof Error) {
+    const raw = err.message.trim();
+    if (raw.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(raw) as { error?: string };
+        const inner = (parsed.error || '').toLowerCase();
+        if (inner.includes('permission') || inner.includes('insufficient')) {
+          return 'Registration could not be saved. Registration may have just closed, your chosen username or Minecraft IGN was just claimed, or a field was rejected. Please review your details and try again.';
+        }
+      } catch {
+        // Fall through to generic message
+      }
+      return 'Unable to save your player profile right now. Please verify your details and try again.';
+    }
+    return raw;
+  }
+
+  return 'Unable to complete registration.';
+}
+
 export function RegisterPage() {
-  const { siteConfig } = useAuth();
+  const { user, playerProfile, isAdmin, authReady, siteConfig, logout } = useAuth();
   const navigate = useNavigate();
 
   const [fullName, setFullName] = useState('');
@@ -17,6 +55,8 @@ export function RegisterPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [country, setCountry] = useState('');
   const [stateRegion, setStateRegion] = useState('');
   const [district, setDistrict] = useState('');
@@ -28,6 +68,96 @@ export function RegisterPage() {
 
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+
+  const isCompletingExistingAuth = Boolean(authReady && user && !playerProfile && !isAdmin);
+
+  useEffect(() => {
+    if (isCompletingExistingAuth && user?.email) {
+      setEmail(user.email);
+    }
+  }, [isCompletingExistingAuth, user?.email]);
+
+  if (!authReady) {
+    return (
+      <div className="bg-[#090B0E] text-slate-300 py-24 text-center text-sm">
+        Checking registration availability...
+      </div>
+    );
+  }
+
+  if (user && playerProfile) {
+    return (
+      <div className="bg-[#090B0E] text-slate-100 py-16 sm:py-24 px-4">
+        <div className="max-w-xl mx-auto bg-[#11151B] border border-[#232B38] rounded-xl p-8 text-center space-y-5">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto">
+            <CheckCircle2 className="w-6 h-6 text-emerald-400" />
+          </div>
+          <h1 className="text-3xl font-display font-bold text-white">
+            Already Registered &amp; Signed In
+          </h1>
+          <p className="text-sm text-slate-300 leading-relaxed">
+            You are currently signed in as{' '}
+            <strong className="text-white">@{playerProfile.username}</strong> (
+            {playerProfile.registrationStatus.replace('_', ' ')}). Manage your profile or check
+            approval status from your Player Dashboard.
+          </p>
+          <div className="pt-2 flex flex-wrap justify-center gap-3">
+            <Link
+              to="/dashboard"
+              className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+            >
+              Go to Player Dashboard
+            </Link>
+            <button
+              type="button"
+              onClick={async () => {
+                await logout();
+              }}
+              className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-[#181E27] hover:bg-[#202834] border border-[#2A3444] rounded-lg transition-colors"
+            >
+              Sign Out to Register Another Account
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (user && isAdmin && !playerProfile) {
+    return (
+      <div className="bg-[#090B0E] text-slate-100 py-16 sm:py-24 px-4">
+        <div className="max-w-xl mx-auto bg-[#11151B] border border-[#232B38] rounded-xl p-8 text-center space-y-5">
+          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center mx-auto">
+            <ShieldCheck className="w-6 h-6 text-emerald-400" />
+          </div>
+          <h1 className="text-3xl font-display font-bold text-white">
+            Administrator Session Active
+          </h1>
+          <p className="text-sm text-slate-300 leading-relaxed">
+            You are signed in as an Administrator ({user.email}). Sign out first if you want to
+            register a separate player account.
+          </p>
+          <div className="pt-2 flex flex-wrap justify-center gap-3">
+            <Link
+              to="/admin"
+              className="px-5 py-2.5 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+            >
+              Open Administrator Dashboard
+            </Link>
+            <button
+              type="button"
+              onClick={async () => {
+                await logout();
+              }}
+              className="px-5 py-2.5 text-sm font-medium text-slate-300 bg-[#181E27] hover:bg-[#202834] border border-[#2A3444] rounded-lg transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (!siteConfig.registrationOpen) {
     return (
@@ -71,7 +201,11 @@ export function RegisterPage() {
     const cleanFullName = fullName.trim();
     const cleanUsername = username.trim();
     const cleanUsernameLower = cleanUsername.toLowerCase();
-    const cleanEmail = email.trim().toLowerCase();
+    const cleanEmail = (
+      isCompletingExistingAuth && user?.email ? user.email : email
+    )
+      .trim()
+      .toLowerCase();
     const cleanCountry = country.trim();
     const cleanState = stateRegion.trim();
     const cleanDistrict = district.trim();
@@ -92,20 +226,25 @@ export function RegisterPage() {
       setError('Please enter a valid email address.');
       return;
     }
-    if (password.length < 8 || password.length > 128) {
-      setError('Password must be at least 8 characters long.');
-      return;
-    }
-    if (password !== confirmPassword) {
-      setError('Passwords do not match.');
-      return;
+    if (!isCompletingExistingAuth) {
+      if (password.length < 8 || password.length > 128) {
+        setError('Password must be at least 8 characters long.');
+        return;
+      }
+      if (password !== confirmPassword) {
+        setError('Passwords do not match.');
+        return;
+      }
     }
     if (
       cleanCountry.length < UMC_LIMITS.REGION_MIN ||
+      cleanCountry.length > UMC_LIMITS.REGION_MAX ||
       cleanState.length < UMC_LIMITS.REGION_MIN ||
-      cleanDistrict.length < UMC_LIMITS.REGION_MIN
+      cleanState.length > UMC_LIMITS.REGION_MAX ||
+      cleanDistrict.length < UMC_LIMITS.REGION_MIN ||
+      cleanDistrict.length > UMC_LIMITS.REGION_MAX
     ) {
-      setError('Country, State, and District are required (minimum 2 characters each).');
+      setError('Country, State, and District must each be between 2 and 60 characters.');
       return;
     }
     if (!UMC_PATTERNS.MC_USERNAME.test(cleanMc) || cleanMcKey.length < 3) {
@@ -132,11 +271,12 @@ export function RegisterPage() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          existingAuthAccount: isCompletingExistingAuth,
           fullName: cleanFullName,
           username: cleanUsername,
           email: cleanEmail,
-          password,
-          confirmPassword,
+          password: isCompletingExistingAuth ? '' : password,
+          confirmPassword: isCompletingExistingAuth ? '' : confirmPassword,
           country: cleanCountry,
           state: cleanState,
           district: cleanDistrict,
@@ -146,9 +286,14 @@ export function RegisterPage() {
           contactDetails: cleanContact,
         }),
       });
-      const valJson = (await valRes.json()) as { valid: boolean; error?: string };
-      if (!valRes.ok || !valJson.valid) {
-        setError(valJson.error || 'Registration validation failed.');
+      let valJson: { valid?: boolean; error?: string } | null = null;
+      try {
+        valJson = (await valRes.json()) as { valid?: boolean; error?: string };
+      } catch {
+        valJson = null;
+      }
+      if (!valRes.ok || !valJson?.valid) {
+        setError(valJson?.error || 'Registration validation failed.');
         setSubmitting(false);
         return;
       }
@@ -169,31 +314,33 @@ export function RegisterPage() {
         return;
       }
 
-      // 3. Create Firebase Auth account
-      const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
-      await updateProfile(cred.user, { displayName: cleanFullName });
+      // 3. Create or reuse Firebase Auth account
+      let targetUser: User;
+      let createdNewAuthUser = false;
 
-      // 4. Send email verification (non-blocking if SMTP throttled)
-      try {
-        await sendEmailVerification(cred.user);
-      } catch {
-        // User can also resend from dashboard
+      if (isCompletingExistingAuth && user) {
+        targetUser = user;
+      } else {
+        const cred = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        targetUser = cred.user;
+        createdNewAuthUser = true;
       }
 
-      // 5. Atomically reserve username, Minecraft username, and create PENDING_APPROVAL player record
+      // 4. Atomically reserve username, Minecraft username, and create PENDING_APPROVAL player record
+      // Commit Firestore batch before non-blocking profile/verification updates to avoid AuthContext snapshot race.
       const batch = writeBatch(db);
-      const playerRef = doc(db, 'players', cred.user.uid);
+      const playerRef = doc(db, 'players', targetUser.uid);
 
       batch.set(usernameDocRef, {
-        uid: cred.user.uid,
+        uid: targetUser.uid,
         createdAt: serverTimestamp(),
       });
       batch.set(mcDocRef, {
-        uid: cred.user.uid,
+        uid: targetUser.uid,
         createdAt: serverTimestamp(),
       });
       batch.set(playerRef, {
-        uid: cred.user.uid,
+        uid: targetUser.uid,
         fullName: cleanFullName,
         username: cleanUsername,
         usernameLower: cleanUsernameLower,
@@ -218,29 +365,32 @@ export function RegisterPage() {
       try {
         await batch.commit();
       } catch (fsErr) {
-        // Clean up Auth user if Firestore batch failed (e.g. race condition duplicate)
-        try {
-          await cred.user.delete();
-        } catch {
-          // Ignore cleanup error
+        // Clean up newly created Auth user if Firestore batch failed (e.g. race condition duplicate)
+        if (createdNewAuthUser) {
+          try {
+            await targetUser.delete();
+          } catch {
+            // Ignore cleanup error
+          }
         }
-        handleFirestoreError(fsErr, OperationType.WRITE, `players/${cred.user.uid}`);
+        handleFirestoreError(fsErr, OperationType.WRITE, `players/${targetUser.uid}`);
+      }
+
+      // 5. Update Auth displayName and dispatch verification email non-blocking
+      try {
+        await updateProfile(targetUser, { displayName: cleanFullName });
+      } catch {
+        // Non-blocking
+      }
+      if (!targetUser.emailVerified) {
+        void sendEmailVerification(targetUser).catch(() => {
+          // User can also resend from dashboard
+        });
       }
 
       navigate('/dashboard');
     } catch (err: unknown) {
-      const code = (err as { code?: string })?.code || '';
-      if (code === 'auth/email-already-in-use') {
-        setError('An account with this email address already exists.');
-      } else if (code === 'auth/weak-password') {
-        setError('Password is too weak. Use at least 8 characters with letters and numbers.');
-      } else if (code === 'auth/operation-not-allowed') {
-        setError(
-          'Email/Password sign-in is not yet enabled in Firebase Console. An administrator must enable the Email/Password provider in Firebase Authentication.'
-        );
-      } else {
-        setError(err instanceof Error ? err.message : 'Unable to complete registration.');
-      }
+      setError(mapRegistrationError(err));
     } finally {
       setSubmitting(false);
     }
@@ -254,7 +404,9 @@ export function RegisterPage() {
             <UserPlus className="w-4 h-4" />
             <span>Competitor Onboarding</span>
           </div>
-          <h1 className="text-4xl font-display font-bold text-white">Player Registration</h1>
+          <h1 className="text-4xl font-display font-bold text-white">
+            {isCompletingExistingAuth ? 'Complete Player Registration' : 'Player Registration'}
+          </h1>
           <p className="text-sm text-slate-400">
             All registrations receive <strong className="text-amber-300">Pending Approval</strong>{' '}
             status and must be reviewed by a UMC Administrator before entering tournaments.
@@ -265,6 +417,24 @@ export function RegisterPage() {
           onSubmit={handleSubmit}
           className="p-6 sm:p-8 rounded-xl bg-[#11151B] border border-[#232B38] space-y-6"
         >
+          {isCompletingExistingAuth && (
+            <div className="p-4 rounded-lg bg-amber-950/35 border border-amber-500/35 text-amber-100 text-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <span>
+                You are signed in as <strong className="text-white">{user?.email}</strong> without an
+                active player profile. Complete your details below to register for review.
+              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  await logout();
+                }}
+                className="px-3 py-1.5 text-xs font-semibold text-slate-200 bg-[#181E27] hover:bg-[#222A37] border border-[#2C374A] rounded-lg whitespace-nowrap shrink-0"
+              >
+                Use Different Email
+              </button>
+            </div>
+          )}
+
           {error && (
             <div className="p-4 rounded-lg bg-red-950/50 border border-red-500/40 text-red-200 text-sm">
               {error}
@@ -285,6 +455,7 @@ export function RegisterPage() {
                   id="reg-fullname"
                   type="text"
                   required
+                  autoComplete="name"
                   maxLength={UMC_LIMITS.FULL_NAME_MAX}
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -300,6 +471,7 @@ export function RegisterPage() {
                   id="reg-username"
                   type="text"
                   required
+                  autoComplete="username"
                   maxLength={UMC_LIMITS.USERNAME_MAX}
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
@@ -318,10 +490,16 @@ export function RegisterPage() {
                   id="reg-email"
                   type="email"
                   required
+                  autoComplete="email"
+                  readOnly={isCompletingExistingAuth && Boolean(user?.email)}
                   maxLength={UMC_LIMITS.EMAIL_MAX}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-[#0B0E12] border border-[#263040] rounded-lg text-slate-100 focus:border-emerald-500 focus:outline-none"
+                  className={`w-full px-3.5 py-2.5 text-sm border rounded-lg focus:outline-none ${
+                    isCompletingExistingAuth && user?.email
+                      ? 'bg-[#131820] border-[#263040] text-slate-400 cursor-not-allowed'
+                      : 'bg-[#0B0E12] border-[#263040] text-slate-100 focus:border-emerald-500'
+                  }`}
                   placeholder="player@example.com"
                 />
               </div>
@@ -333,6 +511,7 @@ export function RegisterPage() {
                   id="reg-age"
                   type="number"
                   required
+                  step={1}
                   min={UMC_LIMITS.AGE_MIN}
                   max={UMC_LIMITS.AGE_MAX}
                   value={age}
@@ -343,38 +522,68 @@ export function RegisterPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label htmlFor="reg-password" className="block text-sm font-medium text-slate-200">
-                  Password (min. 8 characters) *
-                </label>
-                <input
-                  id="reg-password"
-                  type="password"
-                  required
-                  minLength={8}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-[#0B0E12] border border-[#263040] rounded-lg text-slate-100 focus:border-emerald-500 focus:outline-none"
-                  placeholder="Create a strong password"
-                />
+            {!isCompletingExistingAuth && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1.5">
+                  <label htmlFor="reg-password" className="block text-sm font-medium text-slate-200">
+                    Password (min. 8 characters) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="reg-password"
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="new-password"
+                      minLength={8}
+                      maxLength={128}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      className="w-full px-3.5 py-2.5 pr-10 text-sm bg-[#0B0E12] border border-[#263040] rounded-lg text-slate-100 focus:border-emerald-500 focus:outline-none"
+                      placeholder="Create a strong password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      className="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-200"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label htmlFor="reg-confirm" className="block text-sm font-medium text-slate-200">
+                    Confirm Password *
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="reg-confirm"
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      required
+                      autoComplete="new-password"
+                      minLength={8}
+                      maxLength={128}
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full px-3.5 py-2.5 pr-10 text-sm bg-[#0B0E12] border border-[#263040] rounded-lg text-slate-100 focus:border-emerald-500 focus:outline-none"
+                      placeholder="Re-enter password"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword((prev) => !prev)}
+                      aria-label={showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'}
+                      className="absolute inset-y-0 right-0 px-3 flex items-center text-slate-400 hover:text-slate-200"
+                    >
+                      {showConfirmPassword ? (
+                        <EyeOff className="w-4 h-4" />
+                      ) : (
+                        <Eye className="w-4 h-4" />
+                      )}
+                    </button>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-1.5">
-                <label htmlFor="reg-confirm" className="block text-sm font-medium text-slate-200">
-                  Confirm Password *
-                </label>
-                <input
-                  id="reg-confirm"
-                  type="password"
-                  required
-                  minLength={8}
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full px-3.5 py-2.5 text-sm bg-[#0B0E12] border border-[#263040] rounded-lg text-slate-100 focus:border-emerald-500 focus:outline-none"
-                  placeholder="Re-enter password"
-                />
-              </div>
-            </div>
+            )}
           </div>
 
           {/* Minecraft & Contact */}

@@ -190,7 +190,7 @@ service cloud.firestore {
     function isValidProjectSubmission(data) {
       return data.keys().hasAll([
           'tournamentId', 'tournamentName', 'playerUid', 'playerUsername',
-          'minecraftUsername', 'title', 'description', 'screenshots',
+          'minecraftUsername', 'title', 'description',
           'projectFileName', 'projectFileSize', 'projectFileMime', 'projectFileChunkCount',
           'externalFileUrl', 'status', 'adminNote', 'reviewedBy', 'createdAt', 'updatedAt'
         ])
@@ -207,10 +207,12 @@ service cloud.firestore {
         && data.minecraftUsername is string && data.minecraftUsername.size() >= 3 && data.minecraftUsername.size() <= 32
         && data.title is string && data.title.size() >= 3 && data.title.size() <= 120
         && data.description is string && data.description.size() >= 10 && data.description.size() <= 4000
-        && data.screenshots is list && data.screenshots.size() >= 1 && data.screenshots.size() <= 3
-        && data.screenshots[0] is string && data.screenshots[0].size() >= 10 && data.screenshots[0].size() <= 240000
-        && (data.screenshots.size() < 2 || (data.screenshots[1] is string && data.screenshots[1].size() >= 10 && data.screenshots[1].size() <= 240000))
-        && (data.screenshots.size() < 3 || (data.screenshots[2] is string && data.screenshots[2].size() >= 10 && data.screenshots[2].size() <= 240000))
+        && (!('screenshots' in data) || (
+          data.screenshots is list && data.screenshots.size() <= 3
+          && (data.screenshots.size() < 1 || (data.screenshots[0] is string && data.screenshots[0].size() >= 10 && data.screenshots[0].size() <= 240000))
+          && (data.screenshots.size() < 2 || (data.screenshots[1] is string && data.screenshots[1].size() >= 10 && data.screenshots[1].size() <= 240000))
+          && (data.screenshots.size() < 3 || (data.screenshots[2] is string && data.screenshots[2].size() >= 10 && data.screenshots[2].size() <= 240000))
+        ))
         && data.projectFileName is string && data.projectFileName.size() <= 160
         && data.projectFileSize is int && data.projectFileSize >= 0 && data.projectFileSize <= 3145728
         && data.projectFileMime is string && data.projectFileMime.size() <= 120
@@ -605,6 +607,7 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && isValidId(submissionId)
         && isValidProjectSubmission(incoming())
+        && !('screenshots' in incoming())
         && incoming().playerUid == request.auth.uid
         && incoming().status == 'PENDING'
         && incoming().adminNote == ''
@@ -635,7 +638,7 @@ service cloud.firestore {
         && incoming().minecraftUsername == existing().minecraftUsername
         && incoming().title == existing().title
         && incoming().description == existing().description
-        && incoming().screenshots == existing().screenshots
+        && (!('screenshots' in existing()) || ('screenshots' in incoming() && incoming().screenshots == existing().screenshots))
         && incoming().projectFileName == existing().projectFileName
         && incoming().projectFileSize == existing().projectFileSize
         && incoming().projectFileMime == existing().projectFileMime
