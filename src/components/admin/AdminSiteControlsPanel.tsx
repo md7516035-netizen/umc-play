@@ -73,8 +73,8 @@ export function AdminSiteControlsPanel({
         handleFirestoreError(err, OperationType.WRITE, 'siteConfig/global');
       }
 
-      // Immediately refresh Express HTTP 503 cache
-      await fetch('/api/site-status/refresh', { method: 'POST' });
+      // Immediately refresh Express HTTP 503 cache when Express server is active
+      await fetch('/api/site-status/refresh', { method: 'POST' }).catch(() => {});
       onFeedback('success', 'Site registration and availability settings saved.');
     } catch (err) {
       onFeedback('error', err instanceof Error ? err.message : 'Failed to save site settings.');

@@ -266,36 +266,61 @@ export function RegisterPage() {
 
     setSubmitting(true);
     try {
-      // 1. Backend input validation & live registration gate check
-      const valRes = await fetch('/api/validate-registration', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          existingAuthAccount: isCompletingExistingAuth,
-          fullName: cleanFullName,
-          username: cleanUsername,
-          email: cleanEmail,
-          password: isCompletingExistingAuth ? '' : password,
-          confirmPassword: isCompletingExistingAuth ? '' : confirmPassword,
-          country: cleanCountry,
-          state: cleanState,
-          district: cleanDistrict,
-          minecraftUsername: cleanMc,
-          minecraftEdition,
-          age: parsedAge,
-          contactDetails: cleanContact,
-        }),
-      });
-      let valJson: { valid?: boolean; error?: string } | null = null;
+      // 1. Backend validation when Express API is mounted; fall back to live Firestore check on published static hosting
+      let verifiedByApi = false;
       try {
-        valJson = (await valRes.json()) as { valid?: boolean; error?: string };
+        const valRes = await fetch('/api/validate-registration', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            existingAuthAccount: isCompletingExistingAuth,
+            fullName: cleanFullName,
+            username: cleanUsername,
+            email: cleanEmail,
+            password: isCompletingExistingAuth ? '' : password,
+            confirmPassword: isCompletingExistingAuth ? '' : confirmPassword,
+            country: cleanCountry,
+            state: cleanState,
+            district: cleanDistrict,
+            minecraftUsername: cleanMc,
+            minecraftEdition,
+            age: parsedAge,
+            contactDetails: cleanContact,
+          }),
+        });
+        const contentType = valRes.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const valJson = (await valRes.json()) as { valid?: boolean; error?: string };
+          if (!valRes.ok || !valJson?.valid) {
+            setError(valJson?.error || 'Registration validation failed.');
+            setSubmitting(false);
+            return;
+          }
+          verifiedByApi = true;
+        }
       } catch {
-        valJson = null;
+        // Published static hosting without Express backend falls back to direct Firestore check below
       }
-      if (!valRes.ok || !valJson?.valid) {
-        setError(valJson?.error || 'Registration validation failed.');
-        setSubmitting(false);
-        return;
+
+      if (!verifiedByApi) {
+        try {
+          const cfgSnap = await getDoc(doc(db, 'siteConfig', 'global'));
+          if (cfgSnap.exists()) {
+            const cfg = cfgSnap.data() as {
+              registrationOpen?: boolean;
+              registrationClosedMessage?: string;
+            };
+            if (cfg.registrationOpen === false) {
+              setError(
+                cfg.registrationClosedMessage || 'Player Registration is Currently Closed.'
+              );
+              setSubmitting(false);
+              return;
+            }
+          }
+        } catch {
+          // Firestore security rules also enforce registrationOpen on write
+        }
       }
 
       // 2. Check username and Minecraft username uniqueness before creating Auth user

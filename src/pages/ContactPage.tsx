@@ -53,22 +53,29 @@ export function ContactPage() {
 
     setSubmitting(true);
     try {
-      const validateRes = await fetch('/api/validate-contact', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: cleanName,
-          email: cleanEmail,
-          minecraftUsername: cleanMc,
-          subject: cleanSubject,
-          message: cleanMessage,
-        }),
-      });
-      const validateJson = (await validateRes.json()) as { valid: boolean; error?: string };
-      if (!validateRes.ok || !validateJson.valid) {
-        setError(validateJson.error || 'Validation failed. Please check your message.');
-        setSubmitting(false);
-        return;
+      try {
+        const validateRes = await fetch('/api/validate-contact', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: cleanName,
+            email: cleanEmail,
+            minecraftUsername: cleanMc,
+            subject: cleanSubject,
+            message: cleanMessage,
+          }),
+        });
+        const contentType = validateRes.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const validateJson = (await validateRes.json()) as { valid?: boolean; error?: string };
+          if (!validateRes.ok || !validateJson?.valid) {
+            setError(validateJson?.error || 'Validation failed. Please check your message.');
+            setSubmitting(false);
+            return;
+          }
+        }
+      } catch {
+        // Static/published hosting without Express backend uses client + Firestore rules validation
       }
 
       const msgId = `msg_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
